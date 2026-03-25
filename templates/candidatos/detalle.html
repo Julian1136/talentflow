@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{{ candidato.nombre_completo }}{% endblock %}
+{% block page_title %}{{ candidato.nombre_completo }}{% endblock %}
+{% block page_sub %}Cédula: {{ candidato.cedula }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('candidatos.expediente', cedula=candidato.cedula) }}" class="btn btn-secondary">Expediente</a>
+<a href="{{ url_for('candidatos.editar', cedula=candidato.cedula) }}" class="btn btn-secondary">Editar perfil</a>
+{% if current_user.es_reclutador %}
+<button class="btn btn-primary" onclick="mostrarFormAplicacion()">+ Aplicar a vacante</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <!-- Datos personales -->
+  <div class="card">
+    <div class="card-title">Información básica</div>
+    <div class="grid-2" style="gap: 12px;">
+      <div><span class="text-muted">Teléfono:</span> {{ candidato.telefono or '-' }}</div>
+      <div><span class="text-muted">Correo:</span> {{ candidato.correo or '-' }}</div>
+      <div><span class="text-muted">Dirección:</span> {{ candidato.direccion or '-' }}</div>
+      <div><span class="text-muted">Ciudad:</span> {{ candidato.ciudad or '-' }}</div>
+      <div><span class="text-muted">Fuente:</span> {{ candidato.fuente_captacion or '-' }}</div>
+      <div><span class="text-muted">Registro:</span> {{ candidato.fecha_registro.strftime('%d/%m/%Y') }}</div>
+    </div>
+    <hr class="my-16" style="border-color: var(--border);">
+    <div class="card-title mb-8">Habilidades</div>
+    <div>
+      {% if candidato.hoja_de_vida and candidato.hoja_de_vida.habilidades %}
+        {% for h in candidato.hoja_de_vida.habilidades %}
+          <span class="chip">{{ h }}</span>
+        {% endfor %}
+      {% else %}
+        <span class="text-muted">No registradas</span>
+      {% endif %}
+    </div>
+    {% if candidato.hoja_de_vida and candidato.hoja_de_vida.resumen_profesional %}
+      <hr class="my-16">
+      <div class="card-title mb-8">Resumen profesional</div>
+      <p>{{ candidato.hoja_de_vida.resumen_profesional }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Documentos -->
+  <div class="card">
+    <div class="card-title">Documentos adjuntos</div>
+    {% if current_user.es_reclutador %}
+    <form method="POST" action="{{ url_for('candidatos.subir_documento', cedula=candidato.cedula) }}" enctype="multipart/form-data" class="mb-16">
+      <div class="flex gap-8 items-center">
+        <select name="tipo_documento" class="form-select" style="flex:1;">
+          <option value="hoja_de_vida">Hoja de vida</option>
+          <option value="documento">Otro documento</option>
+        </select>
+        <input type="file" name="archivo" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
+        <button type="submit" class="btn btn-primary btn-sm">Subir</button>
+      </div>
+    </form>
+    {% endif %}
+    {% if candidato.documentos %}
+    <ul class="list-unstyled">
+      {% for doc in candidato.documentos %}
+      <li class="flex justify-between items-center py-2 border-bottom">
+        <span>{{ doc.nombre_original }} <span class="text-xs text-muted">({{ doc.tipo_documento }})</span></span>
+        <a href="{{ url_for('candidatos.descargar_documento', doc_id=doc.id) }}" class="btn btn-secondary btn-xs">Descargar</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted">No hay documentos cargados.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Aplicaciones -->
+<div class="card mt-24">
+  <div class="card-title">Historial de aplicaciones</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Vacante</th><th>Fecha aplicación</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>
+        {% for app in candidato.aplicaciones %}
+        <tr>
+          <td><strong>{{ app.vacante.titulo }}</strong><br><span class="text-xs text-muted">{{ app.vacante.area }}</span></td>
+          <td>{{ app.fecha_aplicacion.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge badge-{{ 'green' if app.estado == 'contratado' else 'blue' if app.estado == 'aprobado' else 'gray' }}">{{ app.estado_legible }}</span></td>
+          <td><a href="{{ url_for('proceso.detalle', app_id=app.id) }}" class="btn btn-secondary btn-sm">Ver proceso</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted">Este candidato aún no ha sido aplicado a ninguna vacante.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal para aplicar a vacante -->
+<div id="modalAplicar" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+  <div class="card" style="width:400px;">
+    <div class="card-title">Aplicar a vacante</div>
+    <form method="POST" action="{{ url_for('candidatos.aplicar_vacante', cedula=candidato.cedula) }}">
+      <div class="form-group">
+        <label class="form-label">Seleccionar vacante</label>
+        <select name="id_vacante" class="form-select" required>
+          {% for v in vacantes %}
+          <option value="{{ v.id }}">{{ v.titulo }} ({{ v.area }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primary">Aplicar</button>
+        <button type="button" onclick="cerrarModal()" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function mostrarFormAplicacion() {
+  document.getElementById('modalAplicar').style.display = 'flex';
+}
+function cerrarModal() {
+  document.getElementById('modalAplicar').style.display = 'none';
+}
+</script>
+{% endblock %}

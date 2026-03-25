@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes{% endblock %}
+{% block page_title %}Reportes y exportaciones{% endblock %}
+{% block page_sub %}Generación de informes{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Exportar candidatos</div>
+    <p class="mb-16">Descarga todos los candidatos activos en formato CSV para análisis externo.</p>
+    <a href="{{ url_for('reportes.exportar_candidatos') }}" class="btn btn-primary">Exportar a CSV</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Reporte de vacantes</div>
+    <p class="mb-16">Próximamente: reportes personalizados de vacantes y procesos.</p>
+    <button class="btn btn-secondary" disabled>En desarrollo</button>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Vacantes{% endblock %}
+{% block page_title %}Vacantes{% endblock %}
+{% block page_sub %}Gestión de posiciones abiertas{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('vacantes.nueva') }}" class="btn btn-primary">+ Nueva vacante</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="flex justify-between items-center mb-16">
+    <div>
+      <a href="{{ url_for('vacantes.lista') }}" class="btn btn-secondary btn-sm">Todas</a>
+      <a href="{{ url_for('vacantes.lista', estado='abierta') }}" class="btn btn-secondary btn-sm">Abiertas</a>
+      <a href="{{ url_for('vacantes.lista', estado='cerrada') }}" class="btn btn-secondary btn-sm">Cerradas</a>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Título</th><th>Área</th><th>Ciudad</th><th>Candidatos</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>
+        {% for v in vacantes %}
+        <tr>
+          <td><strong>{{ v.titulo }}</strong></td>
+          <td>{{ v.area }}</td>
+          <td>{{ v.ciudad or '-' }}</td>
+          <td>{{ v.total_candidatos }}</td>
+          <td><span class="badge badge-{{ 'green' if v.estado == 'abierta' else 'gray' }}">{{ v.estado }}</span></td>
+          <td>
+            <a href="{{ url_for('vacantes.detalle', vid=v.id) }}" class="btn btn-secondary btn-sm">Ver</a>
+            {% if v.estado == 'abierta' and current_user.es_admin %}
+            <form method="POST" action="{{ url_for('vacantes.cerrar', vid=v.id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('¿Cerrar esta vacante?')">Cerrar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted">No hay vacantes registradas</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

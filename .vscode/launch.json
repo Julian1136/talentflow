@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TalentFlow: app.py (respeta .env / LAN)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "TalentFlow: flask run en LAN",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "FLASK_APP": "app:app",
+        "FLASK_DEBUG": "1"
+      },
+      "args": ["run", "--host", "0.0.0.0", "--port", "5000"],
+      "jinja": true,
+      "console": "integratedTerminal"
+    }
+  ]
+}

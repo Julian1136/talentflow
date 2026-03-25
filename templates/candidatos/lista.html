@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Candidatos{% endblock %}
+{% block page_title %}Candidatos{% endblock %}
+{% block page_sub %}Gestión de perfiles y hojas de vida{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('candidatos.nuevo') }}" class="btn btn-primary">+ Nuevo candidato</a>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-24">
+  <form method="GET" class="flex gap-8 items-center" style="flex-wrap: wrap;">
+    <div style="flex: 2; min-width: 200px;">
+      <input type="text" name="q" placeholder="Buscar por cédula, nombre, correo..." value="{{ filtro_q }}" class="form-input w-full">
+    </div>
+    <div style="flex: 1;">
+      <select name="estado" class="form-select">
+        <option value="">Todos los estados</option>
+        {% for codigo, nombre in estados %}
+        <option value="{{ codigo }}" {% if filtro_estado == codigo %}selected{% endif %}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="flex: 1;">
+      <input type="text" name="ciudad" placeholder="Ciudad" value="{{ filtro_ciudad }}" class="form-input">
+    </div>
+    <button type="submit" class="btn btn-primary">Buscar</button>
+    <a href="{{ url_for('candidatos.lista') }}" class="btn btn-secondary">Limpiar</a>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Cédula</th><th>Nombre completo</th><th>Teléfono</th><th>Ciudad</th><th>Estado actual</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for c in candidatos %}
+        <tr>
+          <td class="font-mono text-sm">{{ c.cedula }}</td>
+          <td><strong>{{ c.nombre_completo }}</strong><br><span class="text-xs text-muted">{{ c.correo }}</span></td>
+          <td>{{ c.telefono or '-' }}</td>
+          <td>{{ c.ciudad or '-' }}</td>
+          <td>{% if c.ultimo_estado != 'Sin aplicaciones' %}<span class="badge badge-blue">{{ c.ultimo_estado }}</span>{% else %}<span class="badge badge-gray">{{ c.ultimo_estado }}</span>{% endif %}</td>
+          <td>
+            <a href="{{ url_for('candidatos.detalle', cedula=c.cedula) }}" class="btn btn-secondary btn-sm">Ver</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted">No se encontraron candidatos</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar candidato' if editando else 'Nuevo candidato' }}{% endblock %}
+{% block page_title %}{{ 'Editar candidato' if editando else 'Nuevo candidato' }}{% endblock %}
+{% block page_sub %}Registro de perfil{% endblock %}
+
+{% block content %}
+<div class="card">
+  <form method="POST" {% if not editando %}enctype="multipart/form-data"{% endif %}>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Cédula <span>*</span></label>
+        <input type="text" name="cedula" class="form-input" value="{{ candidato.cedula if candidato else '' }}" {% if editando %}readonly{% endif %} required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nombres <span>*</span></label>
+        <input type="text" name="nombres" class="form-input" value="{{ candidato.nombres if candidato else '' }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Apellidos <span>*</span></label>
+        <input type="text" name="apellidos" class="form-input" value="{{ candidato.apellidos if candidato else '' }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Teléfono</label>
+        <input type="text" name="telefono" class="form-input" value="{{ candidato.telefono if candidato else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Correo electrónico</label>
+        <input type="email" name="correo" class="form-input" value="{{ candidato.correo if candidato else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ciudad</label>
+        <input type="text" name="ciudad" class="form-input" value="{{ candidato.ciudad if candidato else '' }}">
+      </div>
+      <div class="form-full">
+        <label class="form-label">Dirección</label>
+        <textarea name="direccion" class="form-textarea" rows="2">{{ candidato.direccion if candidato else '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fuente de captación</label>
+        <input type="text" name="fuente_captacion" class="form-input" value="{{ candidato.fuente_captacion if candidato else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Habilidades (separadas por comas)</label>
+        <input type="text" name="habilidades" class="form-input" value="{{ ','.join(candidato.hoja_de_vida.habilidades) if candidato and candidato.hoja_de_vida else '' }}">
+        <div class="form-hint">Ej: Python, SQL, Liderazgo</div>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Resumen profesional</label>
+        <textarea name="resumen_profesional" class="form-textarea" rows="4">{{ candidato.hoja_de_vida.resumen_profesional if candidato and candidato.hoja_de_vida else '' }}</textarea>
+      </div>
+      {% if not editando %}
+      <div class="form-full">
+        <label class="form-label">Hoja de vida (PDF, Word, imagen)</label>
+        <input type="file" name="archivo_hv" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+        <div class="form-hint">Puedes subirla ahora o después en el perfil.</div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="flex gap-8 mt-24">
+      <button type="submit" class="btn btn-primary">Guardar</button>
+      <a href="{{ url_for('candidatos.lista') }}" class="btn btn-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión — TalentFlow</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --accent: #2563eb;
+      --border: #e2ddd5;
+      --text: #1a1916;
+      --text2: #6b6760;
+      --text3: #9e9b95;
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --amber-light: #fffbeb;
+      --amber: #d97706;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-wrap { width: 100%; max-width: 400px; padding: 24px; }
+    .logo-block { text-align: center; margin-bottom: 32px; }
+    .logo-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      background: var(--accent); display: inline-flex;
+      align-items: center; justify-content: center;
+      font-size: 26px; margin-bottom: 12px;
+    }
+    .logo-title { font-size: 22px; font-weight: 600; color: var(--text); }
+    .logo-sub { font-size: 14px; color: var(--text3); margin-top: 4px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+    .form-label { font-size: 13px; font-weight: 500; }
+    .form-input {
+      padding: 10px 13px; border-radius: 7px;
+      border: 1px solid var(--border);
+      font-family: inherit; font-size: 14px;
+      transition: border .15s, box-shadow .15s; width: 100%;
+    }
+    .form-input:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .form-check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text2); }
+    .btn-login {
+      width: 100%; padding: 11px; background: var(--accent);
+      color: white; border: none; border-radius: 7px;
+      font-family: inherit; font-size: 15px; font-weight: 500;
+      cursor: pointer; margin-top: 8px;
+      transition: background .15s;
+    }
+    .btn-login:hover { background: #1d4ed8; }
+    .alert {
+      padding: 10px 14px; border-radius: 7px;
+      font-size: 13px; margin-bottom: 16px;
+    }
+    .alert-danger { background: var(--red-light); color: #b91c1c; border: 1px solid #fecaca; }
+    .alert-success { background: var(--green-light); color: #15803d; border: 1px solid #bbf7d0; }
+    .alert-warning { background: var(--amber-light); color: #92400e; border: 1px solid #fde68a; }
+    .demo-box {
+      margin-top: 20px; padding: 14px; background: var(--bg);
+      border-radius: 7px; border: 1px solid var(--border);
+      font-size: 12px; color: var(--text2);
+    }
+    .demo-box strong { display: block; margin-bottom: 6px; color: var(--text); }
+    .demo-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  </style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="logo-block">
+    <div class="logo-icon">🎯</div>
+    <div class="logo-title">TalentFlow</div>
+    <div class="logo-sub">Plataforma de Gestión de Talento Humano</div>
+  </div>
+
+  <div class="card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('auth.login') }}">
+      <div class="form-group">
+        <label class="form-label" for="correo">Correo electrónico</label>
+        <input class="form-input" type="email" id="correo" name="correo"
+               placeholder="tu@empresa.com" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Contraseña</label>
+        <input class="form-input" type="password" id="password" name="password"
+               placeholder="••••••••" required>
+      </div>
+      <label class="form-check" style="margin-bottom:16px">
+        <input type="checkbox" name="recordar"> Mantener sesión iniciada
+      </label>
+      <button type="submit" class="btn-login">Ingresar →</button>
+    </form>
+  </div>
+
+  <div class="demo-box">
+    <strong>🔐 Inicialización</strong>
+    <div class="demo-row"><span>Usuario semilla:</span><span>admin@empresa.com</span></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;">
+      Ejecuta <code>python setup_db.py</code> para crear esquema y datos iniciales.
+      Cambia la contraseña del administrador después del primer acceso.
+    </div>
+  </div>
+</div>
+</body>
+</html>

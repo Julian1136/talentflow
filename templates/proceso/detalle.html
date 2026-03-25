@@ -1,0 +1,898 @@
+{% extends "base.html" %}
+
+{% block title %}Proceso — {{ aplicacion.candidato.nombre_completo }}{% endblock %}
+{% block page_title %}Proceso de selección{% endblock %}
+{% block page_sub %}{{ aplicacion.candidato.nombre_completo }} → {{ aplicacion.vacante.titulo }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('candidatos.detalle', cedula=aplicacion.cedula_candidato) }}" class="btn btn-secondary">
+  Ver perfil completo
+</a>
+<a href="{{ url_for('kanban.index') }}?vacante={{ aplicacion.id_vacante }}" class="btn btn-secondary">
+  Ver en Kanban
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* ══════════════════════════════════════════════
+   MODAL genérico reutilizable
+══════════════════════════════════════════════ */
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,.45); z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--surface);
+  border-radius: 12px; border: 1px solid var(--border);
+  padding: 28px; width: 100%; max-width: 500px;
+  max-height: 90vh; overflow-y: auto; position: relative;
+  animation: mIn 200ms cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes mIn {
+  from { transform: scale(.94) translateY(10px); opacity: 0; }
+  to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 18px; letter-spacing: -.3px; }
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; font-size: 20px;
+  cursor: pointer; color: var(--text3); line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+
+/* Cerrar al clicar fuera */
+.modal-overlay { cursor: default; }
+.modal-box { cursor: default; }
+
+/* ── Tabs de proceso ── */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Indicador de estado en el card ── */
+.estado-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 8px;
+  background: var(--accent-light); color: var(--accent);
+  font-size: 14px; font-weight: 500; margin-bottom: 16px;
+}
+.estado-pill-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0;
+}
+
+/* ── Formulario inline de cambio de estado ── */
+#form-estado-wrap {
+  margin-top: 14px; padding: 14px; background: var(--bg);
+  border-radius: 8px; border: 1px solid var(--border);
+  display: none;
+}
+
+/* ── Tabla de evaluaciones ── */
+.eval-score {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: 'DM Mono', monospace; font-size: 13px;
+}
+.score-bar-wrap { width: 60px; height: 5px; background: var(--border);
+  border-radius: 3px; overflow: hidden; }
+.score-bar { height: 100%; border-radius: 3px; background: var(--accent); }
+
+/* ── Toast ── */
+#proc-toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--text); color: var(--surface);
+  padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 9999;
+  transform: translateY(80px); opacity: 0; pointer-events: none;
+  transition: transform 280ms cubic-bezier(.34,1.56,.64,1), opacity 220ms;
+}
+#proc-toast.show { transform: translateY(0); opacity: 1; }
+#proc-toast.ok   { background: var(--green); color: #fff; }
+#proc-toast.err  { background: var(--red);   color: #fff; }
+</style>
+{% endblock %}
+
+
+{% block content %}
+
+{# ══════════════════════════════════════════════
+   Fila superior: estado + acciones rápidas
+══════════════════════════════════════════════ #}
+<div class="grid-2 mb-24">
+
+  {# ── Estado actual ── #}
+  <div class="card">
+    <div class="card-title">Estado actual</div>
+    <div class="estado-pill">
+      <span class="estado-pill-dot"></span>
+      {{ aplicacion.estado_legible }}
+    </div>
+
+    {% if current_user.es_reclutador %}
+    <button class="btn btn-secondary btn-sm" onclick="toggleFormEstado()">
+      ✎ Cambiar estado
+    </button>
+
+    <div id="form-estado-wrap">
+      <form method="POST" action="{{ url_for('proceso.cambiar_estado', app_id=aplicacion.id) }}">
+        <div class="form-group" style="margin-bottom:10px;">
+          <label class="form-label">Nuevo estado</label>
+          <select name="estado" class="form-select">
+            {% for codigo, nombre in estados %}
+            <option value="{{ codigo }}"
+              {% if aplicacion.estado == codigo %}selected{% endif %}>
+              {{ nombre }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">Observación (opcional)</label>
+          <textarea name="observaciones" class="form-textarea" rows="2"
+                    placeholder="Motivo del cambio..."></textarea>
+        </div>
+        <div class="flex gap-8">
+          <button type="submit" class="btn btn-primary btn-sm">Actualizar</button>
+          <button type="button" class="btn btn-secondary btn-sm"
+                  onclick="toggleFormEstado()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Acciones rápidas ── #}
+  <div class="card">
+    <div class="card-title">Acciones rápidas</div>
+    <div class="flex gap-8 flex-wrap">
+      {% if current_user.es_reclutador %}
+      <button onclick="abrirModal('modal-contacto')" class="btn btn-secondary">
+        📞 Contacto
+      </button>
+      <button onclick="abrirModal('modal-entrevista')" class="btn btn-secondary">
+        📅 Entrevista
+      </button>
+      {% endif %}
+      {% if current_user.es_psicologo or current_user.es_admin %}
+      <button onclick="abrirModal('modal-psicologica')" class="btn btn-secondary">
+        🧠 Eval. psicológica
+      </button>
+      {% endif %}
+      <button onclick="abrirModal('modal-tecnica')" class="btn btn-secondary">
+        📝 Prueba técnica
+      </button>
+      {% if puede_plantilla_eval and plantillas_data %}
+      <button onclick="abrirModal('modal-plantilla-eval')" class="btn btn-secondary">
+        📋 Eval. plantilla
+      </button>
+      {% endif %}
+      {% if current_user.es_reclutador %}
+      <form method="post" action="{{ url_for('firma.preparar', app_id=aplicacion.id) }}" style="display:inline;">
+        <input type="hidden" name="tipo_documento" value="contrato_oferta">
+        <button type="submit" class="btn btn-secondary">Generar enlace firma</button>
+      </form>
+      <button type="button" class="btn btn-secondary" id="btn-ia-compat">Análisis IA</button>
+      {% endif %}
+    </div>
+    {% if current_user.es_reclutador %}
+    <div id="ia-compat-out" class="text-sm mt-12" style="display:none;padding:12px;background:var(--surface2);border-radius:8px;white-space:pre-wrap;"></div>
+    {% endif %}
+
+    {# Info rápida del candidato #}
+    <hr style="border-color:var(--border);margin:14px 0;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+      <div><span class="text-muted">Cédula:</span> {{ aplicacion.cedula_candidato }}</div>
+      <div><span class="text-muted">Vacante:</span> {{ aplicacion.vacante.titulo }}</div>
+      <div><span class="text-muted">Teléfono:</span> {{ aplicacion.candidato.telefono or '—' }}</div>
+      <div><span class="text-muted">Correo:</span>
+        {% if aplicacion.candidato.correo %}
+        <a href="mailto:{{ aplicacion.candidato.correo }}" style="color:var(--accent);">
+          {{ aplicacion.candidato.correo }}
+        </a>
+        {% else %}—{% endif %}
+      </div>
+      <div><span class="text-muted">Aplicó:</span>
+        {{ aplicacion.fecha_aplicacion.strftime('%d/%m/%Y') }}
+      </div>
+      <div><span class="text-muted">Fuente:</span>
+        {{ aplicacion.candidato.fuente_captacion or '—' }}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ══════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════ #}
+<div class="tabs">
+  <a href="#" class="tab active"    onclick="mostrarTab(event,'tab-historial')">Historial</a>
+  <a href="#" class="tab"           onclick="mostrarTab(event,'tab-contactos')">
+    Contactos
+    {% if aplicacion.contactos %}<span style="margin-left:4px;font-size:11px;background:var(--accent-light);color:var(--accent);padding:1px 5px;border-radius:10px;">{{ aplicacion.contactos|length }}</span>{% endif %}
+  </a>
+  <a href="#" class="tab"           onclick="mostrarTab(event,'tab-entrevistas')">
+    Entrevistas
+    {% if aplicacion.entrevistas %}<span style="margin-left:4px;font-size:11px;background:var(--accent-light);color:var(--accent);padding:1px 5px;border-radius:10px;">{{ aplicacion.entrevistas|length }}</span>{% endif %}
+  </a>
+  {% if current_user.es_psicologo or current_user.es_admin %}
+  <a href="#" class="tab"           onclick="mostrarTab(event,'tab-psicologicas')">
+    Psicológicas
+    {% if aplicacion.evaluaciones_psicologicas %}<span style="margin-left:4px;font-size:11px;background:var(--purple-light);color:var(--purple);padding:1px 5px;border-radius:10px;">{{ aplicacion.evaluaciones_psicologicas|length }}</span>{% endif %}
+  </a>
+  {% endif %}
+  <a href="#" class="tab"           onclick="mostrarTab(event,'tab-tecnicas')">
+    Pruebas técnicas
+    {% if aplicacion.evaluaciones_tecnicas %}<span style="margin-left:4px;font-size:11px;background:var(--green-light);color:var(--green);padding:1px 5px;border-radius:10px;">{{ aplicacion.evaluaciones_tecnicas|length }}</span>{% endif %}
+  </a>
+  {% if puede_plantilla_eval %}
+  <a href="#" class="tab"           onclick="mostrarTab(event,'tab-plantilla-eval')">
+    Eval. plantilla
+    {% if aplicacion.evaluaciones_plantilla %}<span style="margin-left:4px;font-size:11px;background:var(--amber-light);color:var(--amber);padding:1px 5px;border-radius:10px;">{{ aplicacion.evaluaciones_plantilla|length }}</span>{% endif %}
+  </a>
+  {% endif %}
+</div>
+
+{# ── HISTORIAL ── #}
+<div id="tab-historial" class="tab-content active">
+  <div class="card">
+    <div class="timeline">
+      {% for h in aplicacion.historial|sort(attribute='fecha_accion', reverse=True) %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">{{ h.accion }}</div>
+          <div class="timeline-meta">
+            {{ h.fecha_accion.strftime('%d/%m/%Y %H:%M') }}
+            {% if h.estado_anterior and h.estado_nuevo %}
+            · <span style="font-size:11px;color:var(--text3);">{{ h.estado_anterior }} → {{ h.estado_nuevo }}</span>
+            {% endif %}
+          </div>
+          {% if h.observaciones %}
+          <div class="text-sm" style="margin-top:4px;color:var(--text2);">{{ h.observaciones }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="text-muted text-sm">No hay historial aún.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ── CONTACTOS ── #}
+<div id="tab-contactos" class="tab-content">
+  <div class="card">
+    <div class="flex justify-between items-center mb-16">
+      <div class="card-title">Registro de contactos</div>
+      {% if current_user.es_reclutador %}
+      <button onclick="abrirModal('modal-contacto')" class="btn btn-primary btn-sm">+ Nuevo contacto</button>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Canal</th><th>Resultado</th>
+            <th>Observaciones</th><th>Registró</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in aplicacion.contactos|sort(attribute='fecha_contacto', reverse=True) %}
+          <tr>
+            <td class="font-mono text-sm">{{ c.fecha_contacto.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td>
+              {% set canal_icon = {'telefono':'📞','correo':'✉','whatsapp':'💬','presencial':'🤝'} %}
+              {{ canal_icon.get(c.canal, '') }} {{ c.canal or '—' }}
+            </td>
+            <td>
+              <span class="badge badge-{{ 'green' if c.resultado == 'exitoso' else 'amber' if c.resultado == 'reagendado' else 'gray' }}">
+                {{ c.resultado or '—' }}
+              </span>
+            </td>
+            <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              {{ c.observaciones or '—' }}
+            </td>
+            <td class="text-sm text-muted">{{ c.usuario.nombre_completo if c.usuario else '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted">Sin contactos registrados</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── ENTREVISTAS ── #}
+<div id="tab-entrevistas" class="tab-content">
+  <div class="card">
+    <div class="flex justify-between items-center mb-16">
+      <div class="card-title">Entrevistas</div>
+      {% if current_user.es_reclutador %}
+      <button onclick="abrirModal('modal-entrevista')" class="btn btn-primary btn-sm">+ Programar</button>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Tipo</th><th>Lugar</th>
+            <th>Entrevistador</th><th>Resultado</th><th>Observaciones</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in aplicacion.entrevistas|sort(attribute='fecha_programada', reverse=True) %}
+          <tr>
+            <td class="font-mono text-sm">
+              {{ e.fecha_programada.strftime('%d/%m/%Y %H:%M') if e.fecha_programada else '—' }}
+            </td>
+            <td>
+              <span class="badge badge-{{ 'blue' if e.tipo == 'reclutador' else 'purple' if e.tipo == 'jefe_area' else 'green' }}">
+                {{ {'reclutador':'RH','jefe_area':'Jefe área','gerencia':'Gerencia'}.get(e.tipo, e.tipo or '—') }}
+              </span>
+            </td>
+            <td class="text-sm">{{ e.lugar or '—' }}</td>
+            <td class="text-sm">{{ e.entrevistador.nombre_completo if e.entrevistador else '—' }}</td>
+            <td>
+              <span class="badge badge-{{ 'amber' if e.resultado == 'pendiente' else 'green' if e.resultado == 'apto' else 'red' if e.resultado == 'no_apto' else 'gray' }}">
+                {{ e.resultado or 'pendiente' }}
+              </span>
+            </td>
+            <td class="text-sm text-muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {{ e.observaciones or '—' }}
+            </td>
+            <td>
+              {% if e.resultado == 'pendiente' and current_user.es_reclutador %}
+              <button onclick="abrirModalResultado({{ e.id }})"
+                      class="btn btn-secondary btn-xs">Resultado</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted">Sin entrevistas registradas</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── EVALUACIONES PSICOLÓGICAS ── #}
+{% if current_user.es_psicologo or current_user.es_admin %}
+<div id="tab-psicologicas" class="tab-content">
+  <div class="card">
+    <div class="flex justify-between items-center mb-16">
+      <div class="card-title">Evaluaciones psicológicas</div>
+      <button onclick="abrirModal('modal-psicologica')" class="btn btn-primary btn-sm">+ Registrar</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Tipo evaluación</th><th>Resultado</th><th>Observaciones</th><th>Recomendaciones</th></tr>
+        </thead>
+        <tbody>
+          {% for ev in aplicacion.evaluaciones_psicologicas|sort(attribute='fecha_registro', reverse=True) %}
+          <tr>
+            <td class="font-mono text-sm">{{ ev.fecha_evaluacion.strftime('%d/%m/%Y') if ev.fecha_evaluacion else '—' }}</td>
+            <td>{{ ev.tipo_evaluacion or '—' }}</td>
+            <td>
+              <span class="badge badge-{{ 'green' if ev.resultado == 'apto' else 'red' if ev.resultado == 'no_apto' else 'amber' }}">
+                {{ ev.resultado or 'pendiente' }}
+              </span>
+            </td>
+            <td class="text-sm">{{ ev.observaciones or '—' }}</td>
+            <td class="text-sm text-muted">{{ ev.recomendaciones or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted">Sin evaluaciones psicológicas</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── PRUEBAS TÉCNICAS ── #}
+<div id="tab-tecnicas" class="tab-content">
+  <div class="card">
+    <div class="flex justify-between items-center mb-16">
+      <div class="card-title">Pruebas técnicas</div>
+      <button onclick="abrirModal('modal-tecnica')" class="btn btn-primary btn-sm">+ Registrar</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Prueba</th><th>Tipo</th><th>Puntaje</th><th>Resultado</th><th>Observaciones</th></tr>
+        </thead>
+        <tbody>
+          {% for t in aplicacion.evaluaciones_tecnicas|sort(attribute='fecha_registro', reverse=True) %}
+          <tr>
+            <td class="font-mono text-sm">{{ t.fecha_aplicacion.strftime('%d/%m/%Y') if t.fecha_aplicacion else '—' }}</td>
+            <td class="font-weight-500">{{ t.nombre_prueba or '—' }}</td>
+            <td><span class="badge badge-gray">{{ t.tipo or '—' }}</span></td>
+            <td>
+              {% if t.puntaje and t.puntaje_maximo %}
+              <div class="eval-score">
+                {{ t.puntaje|int }}/{{ t.puntaje_maximo|int }}
+                <div class="score-bar-wrap">
+                  <div class="score-bar" style="width:{{ ((t.puntaje / t.puntaje_maximo) * 100)|round }}%;"></div>
+                </div>
+              </div>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              <span class="badge badge-{{ 'green' if t.resultado == 'aprobado' else 'red' if t.resultado == 'reprobado' else 'amber' }}">
+                {{ t.resultado or 'pendiente' }}
+              </span>
+            </td>
+            <td class="text-sm text-muted">{{ t.observaciones or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted">Sin pruebas técnicas</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% if puede_plantilla_eval %}
+<div id="tab-plantilla-eval" class="tab-content">
+  <div class="card">
+    <div class="flex justify-between items-center mb-16">
+      <div class="card-title">Evaluaciones con plantilla</div>
+      {% if plantillas_data %}
+      <button type="button" onclick="abrirModal('modal-plantilla-eval')" class="btn btn-primary btn-sm">+ Nueva evaluación</button>
+      {% endif %}
+    </div>
+    {% if not plantillas_data %}
+    <p class="text-muted text-sm">
+      No hay plantillas activas. Ejecuta en PostgreSQL el script
+      <code>database/03_plantillas_evaluacion.sql</code> y recarga esta página.
+    </p>
+    {% else %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Plantilla</th><th>Puntaje</th><th>Evaluó</th></tr>
+        </thead>
+        <tbody>
+          {% for r in aplicacion.evaluaciones_plantilla|sort(attribute='fecha_registro', reverse=True) %}
+          <tr>
+            <td class="font-mono text-sm">{{ r.fecha_registro.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td>{{ r.plantilla.nombre if r.plantilla else '—' }}</td>
+            <td>
+              {% if r.puntaje_total is not none %}
+              <span class="badge badge-blue">{{ r.puntaje_total }} / 100</span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-sm text-muted">{{ r.usuario.nombre_completo if r.usuario else '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-muted">Sin evaluaciones con plantilla</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════
+   MODAL 1 — Registrar contacto
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-contacto">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModal('modal-contacto')">×</button>
+    <div class="modal-title">📞 Registrar contacto</div>
+    <form method="POST" action="{{ url_for('proceso.registrar_contacto', app_id=aplicacion.id) }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Fecha y hora <span>*</span></label>
+          <input type="datetime-local" name="fecha_contacto" class="form-input" required
+                 value="{{ now_local }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Canal <span>*</span></label>
+          <select name="canal" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            <option value="telefono">📞 Teléfono</option>
+            <option value="correo">✉ Correo electrónico</option>
+            <option value="whatsapp">💬 WhatsApp</option>
+            <option value="presencial">🤝 Presencial</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Resultado <span>*</span></label>
+          <select name="resultado" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            <option value="exitoso">✓ Exitoso — confirmó disponibilidad</option>
+            <option value="sin_respuesta">✕ Sin respuesta</option>
+            <option value="reagendado">↻ Reagendado</option>
+            <option value="no_interesado">✗ No interesado</option>
+          </select>
+        </div>
+        <div class="form-full form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea name="observaciones" class="form-textarea" rows="3"
+                    placeholder="Detalles del contacto, compromisos, próximos pasos..."></textarea>
+        </div>
+      </div>
+      <div class="flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primary">Guardar contacto</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-contacto')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════
+   MODAL 2 — Programar entrevista
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-entrevista">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModal('modal-entrevista')">×</button>
+    <div class="modal-title">📅 Programar entrevista</div>
+    <form method="POST" action="{{ url_for('proceso.programar_entrevista', app_id=aplicacion.id) }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tipo de entrevista <span>*</span></label>
+          <select name="tipo" class="form-select" required>
+            <option value="reclutador">Recursos Humanos</option>
+            <option value="jefe_area">Jefe de Área</option>
+            <option value="gerencia">Gerencia</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Entrevistador</label>
+          <select name="id_entrevistador" class="form-select">
+            <option value="{{ current_user.id }}">{{ current_user.nombre_completo }} (yo)</option>
+            {% for u in usuarios %}
+            {% if u.id != current_user.id %}
+            <option value="{{ u.id }}">{{ u.nombre_completo }} — {{ u.rol.nombre }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fecha y hora <span>*</span></label>
+          <input type="datetime-local" name="fecha_programada" class="form-input" required>
+        </div>
+        <div class="form-full form-group">
+          <label class="form-label">Lugar / Enlace de videollamada</label>
+          <input type="text" name="lugar" class="form-input"
+                 placeholder="Oficina Piso 2 · o · https://meet.google.com/...">
+          <div class="form-hint">
+            ✉ Se enviará automáticamente un correo de citación a
+            <strong>{{ aplicacion.candidato.correo or 'el candidato' }}</strong>
+            {% if not aplicacion.candidato.correo %}
+            <span style="color:var(--amber);">— sin correo registrado, no se enviará notificación</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primary">Programar y notificar</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-entrevista')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════
+   MODAL 3 — Resultado de entrevista específica
+   Se abre dinámicamente con JS pasando el ID
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-resultado-entrevista">
+  <div class="modal-box" style="max-width:420px;">
+    <button class="modal-close" onclick="cerrarModal('modal-resultado-entrevista')">×</button>
+    <div class="modal-title">Registrar resultado de entrevista</div>
+    <form id="form-resultado-entrevista" method="POST">
+      {# action se inyecta dinámicamente por JS #}
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Resultado <span>*</span></label>
+        <select name="resultado" class="form-select" required>
+          <option value="">Seleccionar...</option>
+          <option value="apto">✓ Apto para continuar</option>
+          <option value="no_apto">✗ No apto</option>
+          <option value="aplazado">◌ Aplazado — pendiente información</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:20px;">
+        <label class="form-label">Observaciones y feedback</label>
+        <textarea name="observaciones" class="form-textarea" rows="4"
+                  placeholder="Fortalezas observadas, brechas, recomendaciones, comentarios del entrevistador..."></textarea>
+      </div>
+      <div class="flex gap-8">
+        <button type="submit" class="btn btn-primary">Guardar resultado</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-resultado-entrevista')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════
+   MODAL 4 — Evaluación psicológica
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-psicologica">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModal('modal-psicologica')">×</button>
+    <div class="modal-title">🧠 Registrar evaluación psicológica</div>
+    <form method="POST"
+          action="{{ url_for('proceso.registrar_evaluacion_psicologica', app_id=aplicacion.id) }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tipo de evaluación <span>*</span></label>
+          <select name="tipo_evaluacion" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            <option value="Entrevista psicológica">Entrevista psicológica</option>
+            <option value="Test de personalidad (MBTI)">Test de personalidad (MBTI)</option>
+            <option value="Test de personalidad (DISC)">Test de personalidad (DISC)</option>
+            <option value="Test de inteligencia emocional">Test de inteligencia emocional</option>
+            <option value="Test de aptitud cognitiva">Test de aptitud cognitiva</option>
+            <option value="Test de valores laborales">Test de valores laborales</option>
+            <option value="Evaluación de competencias">Evaluación de competencias</option>
+            <option value="Prueba proyectiva">Prueba proyectiva</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fecha de evaluación</label>
+          <input type="date" name="fecha_evaluacion" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Resultado <span>*</span></label>
+          <select name="resultado" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            <option value="apto">✓ Apto</option>
+            <option value="apto_con_observaciones">⚠ Apto con observaciones</option>
+            <option value="no_apto">✗ No apto</option>
+            <option value="pendiente">⏳ Pendiente análisis</option>
+          </select>
+        </div>
+        <div class="form-full form-group">
+          <label class="form-label">Observaciones clínicas</label>
+          <textarea name="observaciones" class="form-textarea" rows="3"
+                    placeholder="Hallazgos relevantes del proceso evaluativo..."></textarea>
+        </div>
+        <div class="form-full form-group">
+          <label class="form-label">Recomendaciones para el proceso</label>
+          <textarea name="recomendaciones" class="form-textarea" rows="3"
+                    placeholder="Sugerencias para el equipo de selección, condiciones especiales, plan de desarrollo..."></textarea>
+        </div>
+      </div>
+      <div class="form-hint mb-16">
+        Este informe queda registrado digitalmente y solo es visible para psicólogos y administradores.
+      </div>
+      <div class="flex gap-8">
+        <button type="submit" class="btn btn-primary">Registrar evaluación</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-psicologica')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════
+   MODAL 5 — Prueba técnica
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-tecnica">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModal('modal-tecnica')">×</button>
+    <div class="modal-title">📝 Registrar prueba técnica</div>
+    <form method="POST"
+          action="{{ url_for('proceso.registrar_prueba_tecnica', app_id=aplicacion.id) }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tipo <span>*</span></label>
+          <select name="tipo" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            <option value="tecnica">Prueba técnica del cargo</option>
+            <option value="psicotecnica">Prueba psicotécnica</option>
+            <option value="conocimiento">Prueba de conocimiento</option>
+            <option value="practica">Prueba práctica / caso</option>
+            <option value="idioma">Prueba de idioma</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre de la prueba <span>*</span></label>
+          <input type="text" name="nombre_prueba" class="form-input" required
+                 placeholder="Ej: Excel avanzado, Programación Python...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fecha de aplicación</label>
+          <input type="date" name="fecha_aplicacion" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Resultado <span>*</span></label>
+          <select name="resultado" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            <option value="aprobado">✓ Aprobado</option>
+            <option value="reprobado">✗ Reprobado</option>
+            <option value="pendiente">⏳ Pendiente calificación</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Puntaje obtenido</label>
+          <input type="number" name="puntaje" class="form-input" step="0.01" min="0"
+                 placeholder="Ej: 85">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Puntaje máximo</label>
+          <input type="number" name="puntaje_maximo" class="form-input" step="0.01" min="0"
+                 placeholder="Ej: 100">
+        </div>
+        <div class="form-full form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea name="observaciones" class="form-textarea" rows="3"
+                    placeholder="Desempeño, aspectos destacados, áreas de mejora..."></textarea>
+        </div>
+      </div>
+      <div class="flex gap-8 mt-4">
+        <button type="submit" class="btn btn-primary">Registrar prueba</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-tecnica')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if puede_plantilla_eval and plantillas_data %}
+<div class="modal-overlay" id="modal-plantilla-eval">
+  <div class="modal-box" style="max-width:520px;">
+    <button class="modal-close" onclick="cerrarModal('modal-plantilla-eval')">×</button>
+    <div class="modal-title">📋 Evaluación con plantilla</div>
+    <form method="POST"
+          action="{{ url_for('proceso.guardar_evaluacion_plantilla', app_id=aplicacion.id) }}">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Plantilla <span>*</span></label>
+        <select name="id_plantilla" id="sel-plantilla-eval" class="form-select" required
+                onchange="renderCriteriosPlantilla(this.value)">
+          <option value="">Seleccionar…</option>
+          {% for p in plantillas_data %}
+          <option value="{{ p.id }}">{{ p.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="plantilla-criterios-wrap" class="form-grid" style="margin-bottom:16px;"></div>
+      <div class="flex gap-8">
+        <button type="submit" class="btn btn-primary" id="btn-submit-plantilla" disabled>Guardar evaluación</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-plantilla-eval')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div id="proc-toast"></div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+const PLANTILLAS_DATA = {{ plantillas_data | tojson }};
+
+function renderCriteriosPlantilla(plantillaId) {
+  const wrap = document.getElementById('plantilla-criterios-wrap');
+  const btn = document.getElementById('btn-submit-plantilla');
+  if (!wrap || !btn) return;
+  wrap.innerHTML = '';
+  btn.disabled = true;
+  if (!plantillaId) return;
+  const p = PLANTILLAS_DATA.find(x => String(x.id) === String(plantillaId));
+  if (!p || !p.criterios || !p.criterios.length) {
+    wrap.innerHTML = '<p class="text-muted text-sm">Esta plantilla no tiene criterios.</p>';
+    return;
+  }
+  p.criterios.forEach(c => {
+    const maxV = c.max != null ? c.max : 5;
+    const div = document.createElement('div');
+    div.className = 'form-full form-group';
+    div.innerHTML = `
+      <label class="form-label">${(c.texto || c.id || 'Criterio')} <span class="text-muted">(0–${maxV}, peso ${c.peso != null ? c.peso : 1})</span></label>
+      <input type="number" name="criterio_${c.id}" class="form-input" required
+             step="0.1" min="0" max="${maxV}" value="${maxV / 2}">
+    `;
+    wrap.appendChild(div);
+  });
+  btn.disabled = false;
+}
+
+/* ══════════════════════════════════════════════
+   Tabs
+══════════════════════════════════════════════ */
+function mostrarTab(e, id) {
+  e.preventDefault();
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  e.currentTarget.classList.add('active');
+}
+
+/* ══════════════════════════════════════════════
+   Modales
+══════════════════════════════════════════════ */
+function abrirModal(id)  { document.getElementById(id).classList.add('open'); }
+function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+});
+
+/* Escape cierra el modal más reciente */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const abiertos = [...document.querySelectorAll('.modal-overlay.open')];
+    if (abiertos.length) abiertos[abiertos.length - 1].classList.remove('open');
+  }
+});
+
+/* ══════════════════════════════════════════════
+   Form estado (toggle inline)
+══════════════════════════════════════════════ */
+function toggleFormEstado() {
+  const wrap = document.getElementById('form-estado-wrap');
+  wrap.style.display = wrap.style.display === 'none' || !wrap.style.display ? 'block' : 'none';
+}
+
+/* ══════════════════════════════════════════════
+   Modal resultado de entrevista (dinámico)
+══════════════════════════════════════════════ */
+function abrirModalResultado(entId) {
+  const form = document.getElementById('form-resultado-entrevista');
+  const tpl = "{{ url_for('proceso.resultado_entrevista', ent_id=0) }}";
+  form.action = tpl.replace(/\/entrevista\/0\//, "/entrevista/" + entId + "/");
+  abrirModal('modal-resultado-entrevista');
+}
+
+/* ══════════════════════════════════════════════
+   Toast
+══════════════════════════════════════════════ */
+let _tt;
+function toast(msg, tipo = '') {
+  const t = document.getElementById('proc-toast');
+  t.textContent = msg;
+  t.className   = 'show ' + tipo;
+  clearTimeout(_tt);
+  _tt = setTimeout(() => t.className = '', 3200);
+}
+
+/* Mostrar toast si hay flash messages en la URL */
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for cat, msg in messages %}
+window.addEventListener('DOMContentLoaded', () => {
+  toast("{{ msg }}", "{{ 'ok' if cat == 'success' else 'err' if cat == 'danger' else '' }}");
+});
+{% endfor %}
+{% endwith %}
+
+document.getElementById('btn-ia-compat')?.addEventListener('click', async function() {
+  const out = document.getElementById('ia-compat-out');
+  if (!out) return;
+  out.style.display = 'block';
+  out.textContent = 'Consultando…';
+  try {
+    const r = await fetch("{{ url_for('proceso.compatibilidad_ia', app_id=aplicacion.id) }}", {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+    });
+    const d = await r.json();
+    if (d.ok) out.textContent = d.texto;
+    else out.textContent = d.error || 'No disponible.';
+  } catch (e) {
+    out.textContent = 'Error de red.';
+  }
+});
+</script>
+{% endblock %}

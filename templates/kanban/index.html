@@ -1,0 +1,693 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban — Pipeline de Selección{% endblock %}
+{% block page_title %}Pipeline de Selección{% endblock %}
+{% block page_sub %}
+  {% if vacante_sel %}
+    {{ vacante_sel.titulo }} · {{ total_general }} candidatos
+  {% else %}
+    Todas las vacantes · {{ total_general }} candidatos activos
+  {% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+{# Filtro de vacante #}
+<form method="GET" style="display:flex;align-items:center;gap:8px;">
+  <select name="vacante" class="form-select" style="font-size:13px;padding:6px 10px;min-width:200px;" onchange="this.form.submit()">
+    <option value="">Todas las vacantes</option>
+    {% for v in vacantes %}
+    <option value="{{ v.id }}" {% if vacante_sel and vacante_sel.id == v.id %}selected{% endif %}>
+      {{ v.titulo }}
+    </option>
+    {% endfor %}
+  </select>
+</form>
+<a href="{{ url_for('candidatos.nuevo') }}" class="btn btn-primary" style="font-size:13px;">+ Candidato</a>
+{% endblock %}
+
+{% block head %}
+{# SortableJS desde CDN confiable #}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<style>
+  /* ══════════════════════════════════════════════
+     KANBAN — Variables y reset del layout
+  ══════════════════════════════════════════════ */
+  :root {
+    --k-gap: 12px;
+    --k-col-w: 240px;
+    --k-card-radius: 8px;
+    --k-col-radius: 10px;
+    --k-shadow: 0 1px 4px rgba(0,0,0,.07);
+    --k-shadow-drag: 0 8px 24px rgba(0,0,0,.14);
+    --k-transition: 180ms ease;
+  }
+
+  /* Forzar el content a ocupar todo el ancho disponible sin overflow */
+  .content { padding: 16px 20px !important; }
+
+  /* ══════════════════════════════════════════════
+     BARRA DE MÉTRICAS SUPERIOR
+  ══════════════════════════════════════════════ */
+  .k-metrics {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .k-metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    min-width: 130px;
+  }
+  .k-metric-val {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .k-metric-lbl { color: var(--text3); font-size: 11px; margin-top: 2px; }
+  .k-metric-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ══════════════════════════════════════════════
+     CONTENEDOR KANBAN HORIZONTAL
+  ══════════════════════════════════════════════ */
+  .k-board-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 16px;
+    /* Scrollbar personalizado */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .k-board-wrap::-webkit-scrollbar { height: 5px; }
+  .k-board-wrap::-webkit-scrollbar-track { background: transparent; }
+  .k-board-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .k-board {
+    display: flex;
+    gap: var(--k-gap);
+    align-items: flex-start;
+    min-width: max-content;
+    padding: 2px 2px 4px;
+  }
+
+  /* ══════════════════════════════════════════════
+     COLUMNA
+  ══════════════════════════════════════════════ */
+  .k-col {
+    width: var(--k-col-w);
+    flex-shrink: 0;
+    background: var(--bg);
+    border-radius: var(--k-col-radius);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 200px);
+  }
+  .k-col-header {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-radius: var(--k-col-radius) var(--k-col-radius) 0 0;
+    z-index: 2;
+  }
+  .k-col-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .k-col-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: .01em;
+  }
+  .k-col-count {
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 1px 7px;
+    color: var(--text2);
+    min-width: 22px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .k-col-body {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    overflow-y: auto;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    min-height: 80px;
+  }
+  .k-col-body::-webkit-scrollbar { width: 3px; }
+  .k-col-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Zona vacía — target visual cuando la columna está vacía */
+  .k-col-empty {
+    border: 1.5px dashed var(--border);
+    border-radius: 6px;
+    padding: 18px 0;
+    text-align: center;
+    color: var(--text3);
+    font-size: 12px;
+    flex: 1;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ══════════════════════════════════════════════
+     TARJETA DE CANDIDATO
+  ══════════════════════════════════════════════ */
+  .k-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--k-card-radius);
+    padding: 11px 12px;
+    cursor: grab;
+    transition: box-shadow var(--k-transition), transform var(--k-transition), border-color var(--k-transition);
+    position: relative;
+    user-select: none;
+  }
+  .k-card:hover {
+    box-shadow: var(--k-shadow);
+    border-color: #c8c4bc;
+    transform: translateY(-1px);
+  }
+  .k-card:active { cursor: grabbing; }
+
+  /* Estado arrastrando */
+  .k-card.sortable-drag {
+    opacity: 0;
+  }
+  .k-card.sortable-ghost {
+    opacity: 0.35;
+    background: var(--accent-light);
+    border: 1.5px dashed var(--accent);
+    transform: none !important;
+  }
+  .k-card.sortable-chosen {
+    box-shadow: var(--k-shadow-drag);
+    transform: rotate(1.5deg) scale(1.02);
+    border-color: var(--accent);
+    z-index: 999;
+    cursor: grabbing;
+  }
+
+  /* Avatar iniciales */
+  .k-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+    letter-spacing: .02em;
+  }
+
+  .k-card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-bottom: 8px;
+  }
+  .k-card-info { flex: 1; min-width: 0; }
+  .k-card-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .k-card-vacante {
+    font-size: 11px;
+    color: var(--text3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+
+  /* Chips de skills */
+  .k-skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .k-skill {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--surface2);
+    border-radius: 4px;
+    color: var(--text2);
+    font-weight: 500;
+    border: 1px solid var(--border);
+  }
+
+  /* Footer de la tarjeta */
+  .k-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+  .k-card-fecha {
+    font-size: 10px;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .k-card-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity var(--k-transition);
+  }
+  .k-card:hover .k-card-actions { opacity: 1; }
+
+  .k-btn-action {
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--text2);
+    text-decoration: none;
+    transition: background var(--k-transition), color var(--k-transition);
+  }
+  .k-btn-action:hover {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* Fuente de captación como badge pequeño */
+  .k-fuente {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--amber-light);
+    color: var(--amber);
+    border: 1px solid #fde68a;
+    font-weight: 500;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ══════════════════════════════════════════════
+     INDICADORES DE COLUMNA — colores por estado
+  ══════════════════════════════════════════════ */
+  [data-estado="hoja_de_vida_recibida"]  .k-col-dot { background: #94a3b8; }
+  [data-estado="en_revision"]            .k-col-dot { background: #6366f1; }
+  [data-estado="contactado"]             .k-col-dot { background: #0ea5e9; }
+  [data-estado="entrevista_programada"]  .k-col-dot { background: #f59e0b; }
+  [data-estado="entrevista_realizada"]   .k-col-dot { background: #f97316; }
+  [data-estado="evaluacion_psicologica_pendiente"] .k-col-dot { background: #a855f7; }
+  [data-estado="en_pruebas_tecnicas"]    .k-col-dot { background: #ec4899; }
+  [data-estado="aprobado"]               .k-col-dot { background: #10b981; }
+  [data-estado="rechazado"]              .k-col-dot { background: #ef4444; }
+  [data-estado="contratado"]             .k-col-dot { background: #16a34a; }
+
+  /* ── Borde superior de columna con el color del estado ── */
+  [data-estado="hoja_de_vida_recibida"]  { border-top: 3px solid #94a3b8; }
+  [data-estado="en_revision"]            { border-top: 3px solid #6366f1; }
+  [data-estado="contactado"]             { border-top: 3px solid #0ea5e9; }
+  [data-estado="entrevista_programada"]  { border-top: 3px solid #f59e0b; }
+  [data-estado="entrevista_realizada"]   { border-top: 3px solid #f97316; }
+  [data-estado="evaluacion_psicologica_pendiente"] { border-top: 3px solid #a855f7; }
+  [data-estado="en_pruebas_tecnicas"]    { border-top: 3px solid #ec4899; }
+  [data-estado="aprobado"]              { border-top: 3px solid #10b981; }
+  [data-estado="rechazado"]             { border-top: 3px solid #ef4444; }
+  [data-estado="contratado"]            { border-top: 3px solid #16a34a; }
+
+  /* ══════════════════════════════════════════════
+     TOAST DE FEEDBACK (mover tarjeta)
+  ══════════════════════════════════════════════ */
+  #k-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--text);
+    color: var(--surface);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    z-index: 9999;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: transform 280ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease;
+    pointer-events: none;
+    max-width: 320px;
+  }
+  #k-toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  #k-toast.error {
+    background: var(--red);
+    color: #fff;
+  }
+
+  /* ══════════════════════════════════════════════
+     OVERLAY DE CARGA DURANTE DRAG
+  ══════════════════════════════════════════════ */
+  .k-col-body.dropping {
+    background: var(--accent-light);
+    border-radius: 6px;
+    transition: background 200ms;
+  }
+
+  /* ══════════════════════════════════════════════
+     RESPONSIVE mínimo
+  ══════════════════════════════════════════════ */
+  @media (max-width: 900px) {
+    :root { --k-col-w: 200px; }
+    .k-metrics { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Métricas rápidas ── #}
+<div class="k-metrics">
+  {% set meta_colores = {
+    'hoja_de_vida_recibida':  '#94a3b8',
+    'en_revision':            '#6366f1',
+    'contactado':             '#0ea5e9',
+    'entrevista_programada':  '#f59e0b',
+    'entrevista_realizada':   '#f97316',
+    'evaluacion_psicologica_pendiente': '#a855f7',
+    'en_pruebas_tecnicas':    '#ec4899',
+    'aprobado':               '#10b981',
+    'rechazado':              '#ef4444',
+    'contratado':             '#16a34a',
+  } %}
+  {% for codigo, datos in columnas.items() %}
+  {% if totales[codigo] > 0 %}
+  <div class="k-metric">
+    <div class="k-metric-dot" style="background:{{ meta_colores[codigo] }};"></div>
+    <div>
+      <div class="k-metric-val">{{ totales[codigo] }}</div>
+      <div class="k-metric-lbl">{{ datos.nombre }}</div>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+{# ── Tablero ── #}
+<div class="k-board-wrap">
+  <div class="k-board" id="kanban-board">
+
+    {% for codigo, datos in columnas.items() %}
+    <div class="k-col" data-estado="{{ codigo }}">
+
+      {# Cabecera de columna #}
+      <div class="k-col-header">
+        <div class="k-col-dot"></div>
+        <div class="k-col-title">{{ datos.nombre }}</div>
+        <div class="k-col-count" id="count-{{ codigo }}">{{ totales[codigo] }}</div>
+      </div>
+
+      {# Cuerpo — zona de drop #}
+      <div class="k-col-body" id="col-{{ codigo }}" data-estado="{{ codigo }}">
+
+        {% if datos.aplicaciones %}
+          {% for ap in datos.aplicaciones %}
+          {# Calcular iniciales del candidato #}
+          {% set partes = ap.candidato.nombre_completo.split() %}
+          {% set iniciales = (partes[0][0] + partes[-1][0])|upper if partes|length > 1 else partes[0][:2]|upper %}
+
+          <div class="k-card"
+               data-app-id="{{ ap.id }}"
+               data-cedula="{{ ap.cedula_candidato }}"
+               title="{{ ap.candidato.nombre_completo }} — {{ ap.vacante.titulo }}">
+
+            <div class="k-card-top">
+              <div class="k-avatar" style="background:{{ meta_colores[codigo] }};">{{ iniciales }}</div>
+              <div class="k-card-info">
+                <div class="k-card-name">{{ ap.candidato.nombre_completo }}</div>
+                <div class="k-card-vacante">{{ ap.vacante.titulo }}</div>
+              </div>
+            </div>
+
+            {% if ap.candidato.hoja_de_vida and ap.candidato.hoja_de_vida.habilidades %}
+            <div class="k-skills">
+              {% for skill in ap.candidato.hoja_de_vida.habilidades[:3] %}
+              <span class="k-skill">{{ skill }}</span>
+              {% endfor %}
+              {% if ap.candidato.hoja_de_vida.habilidades|length > 3 %}
+              <span class="k-skill">+{{ ap.candidato.hoja_de_vida.habilidades|length - 3 }}</span>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="k-card-footer">
+              <span class="k-card-fecha">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style="opacity:.5">
+                  <rect x="1" y="2" width="10" height="9" rx="2" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M4 1v2M8 1v2M1 5h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+                {{ ap.fecha_aplicacion.strftime('%d/%m/%y') }}
+              </span>
+
+              <div class="k-card-actions">
+                <a href="{{ url_for('proceso.detalle', app_id=ap.id) }}"
+                   class="k-btn-action" title="Ver proceso">
+                  →
+                </a>
+                <a href="{{ url_for('candidatos.detalle', cedula=ap.cedula_candidato) }}"
+                   class="k-btn-action" title="Ver candidato">
+                  👤
+                </a>
+              </div>
+
+              {% if ap.candidato.fuente_captacion %}
+              <span class="k-fuente" title="{{ ap.candidato.fuente_captacion }}">
+                {{ ap.candidato.fuente_captacion }}
+              </span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+        {% else %}
+          <div class="k-col-empty">Sin candidatos</div>
+        {% endif %}
+
+      </div>{# /k-col-body #}
+    </div>{# /k-col #}
+    {% endfor %}
+
+  </div>{# /k-board #}
+</div>{# /k-board-wrap #}
+
+{# Toast de feedback #}
+<div id="k-toast"></div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+/* ════════════════════════════════════════════════════════
+   KANBAN — Lógica de drag & drop + comunicación con Flask
+════════════════════════════════════════════════════════ */
+
+const CSRF_TOKEN = "{{ request.form.get('csrf_token', '') }}";  // Si usas Flask-WTF
+const MOVER_URL  = "{{ url_for('kanban.mover_tarjeta') }}";
+const ES_RECLUTADOR = {{ 'true' if current_user.es_reclutador else 'false' }};
+
+/* ── Toast helper ── */
+let toastTimer = null;
+function mostrarToast(msg, esError = false) {
+  const t = document.getElementById('k-toast');
+  t.textContent = msg;
+  t.className = 'show' + (esError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2800);
+}
+
+/* ── Actualizar contador de columna ── */
+function actualizarContadores() {
+  document.querySelectorAll('.k-col-body').forEach(body => {
+    const estado  = body.dataset.estado;
+    const counter = document.getElementById('count-' + estado);
+    if (!counter) return;
+    const n = body.querySelectorAll('.k-card').length;
+    counter.textContent = n;
+
+    // Mostrar/ocultar mensaje vacío
+    let empty = body.querySelector('.k-col-empty');
+    if (n === 0) {
+      if (!empty) {
+        empty = document.createElement('div');
+        empty.className = 'k-col-empty';
+        empty.textContent = 'Sin candidatos';
+        body.appendChild(empty);
+      }
+    } else {
+      if (empty) empty.remove();
+    }
+  });
+}
+
+/* ── Inicializar SortableJS en cada columna ── */
+function initSortable() {
+  document.querySelectorAll('.k-col-body').forEach(colBody => {
+    Sortable.create(colBody, {
+      group: 'kanban',           // Todas las columnas comparten el mismo grupo → se puede mover entre ellas
+      animation: 160,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      disabled: !ES_RECLUTADOR,  // Solo reclutadores pueden arrastrar
+      delay: 80,                 // Pequeño retraso para diferenciar click de drag en móvil
+      delayOnTouchOnly: true,
+
+      /* ── Cuando se suelta una tarjeta ── */
+      onEnd(evt) {
+        const tarjeta     = evt.item;
+        const colDestino  = evt.to;         // .k-col-body destino
+        const nuevoEstado = colDestino.dataset.estado;
+        const appId       = parseInt(tarjeta.dataset.appId, 10);
+
+        if (!nuevoEstado || !appId) return;
+
+        // Feedback visual inmediato
+        tarjeta.style.opacity = '0.5';
+        tarjeta.style.pointerEvents = 'none';
+
+        // Llamada AJAX al backend
+        fetch(MOVER_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            app_id: appId,
+            nuevo_estado: nuevoEstado,
+          }),
+        })
+        .then(r => r.json())
+        .then(data => {
+          tarjeta.style.opacity  = '';
+          tarjeta.style.pointerEvents = '';
+
+          if (data.ok) {
+            if (!data.sin_cambio) {
+              mostrarToast(`✓ ${data.candidato} → ${data.estado_legible}`);
+            }
+            actualizarContadores();
+          } else {
+            // Revertir el movimiento si hay error
+            const colOrigen = evt.from;
+            const refCard   = colOrigen.children[evt.oldIndex] || null;
+            colOrigen.insertBefore(tarjeta, refCard);
+            actualizarContadores();
+            mostrarToast(data.error || 'Error al mover el candidato.', true);
+          }
+        })
+        .catch(() => {
+          tarjeta.style.opacity  = '';
+          tarjeta.style.pointerEvents = '';
+          // Revertir
+          const colOrigen = evt.from;
+          colOrigen.insertBefore(tarjeta, colOrigen.children[evt.oldIndex] || null);
+          actualizarContadores();
+          mostrarToast('Error de conexión. Intenta de nuevo.', true);
+        });
+      },
+
+      /* Resaltar columna destino durante el arrastre */
+      onEnter(evt) { evt.to.classList.add('dropping'); },
+      onLeave(evt) { evt.from.classList.remove('dropping'); },
+    });
+  });
+}
+
+/* ── Inicializar al cargar ── */
+document.addEventListener('DOMContentLoaded', () => {
+  initSortable();
+  actualizarContadores();
+
+  /* Shortcut teclado: R = refrescar página manteniendo filtro */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'r' && !e.ctrlKey && !e.metaKey &&
+        document.activeElement.tagName === 'BODY') {
+      location.reload();
+    }
+  });
+});
+
+/* ── Auto-refresh silencioso cada 60 segundos ──
+   Consulta los contadores sin recargar la página completa.
+   Si los contadores cambiaron, muestra un aviso discreto. */
+let lastStats = {};
+async function silentRefresh() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const url    = "{{ url_for('kanban.stats') }}" +
+                   (params.has('vacante') ? '?vacante=' + params.get('vacante') : '');
+    const r    = await fetch(url);
+    const data = await r.json();
+    if (!data.ok) return;
+
+    let cambios = false;
+    for (const [estado, count] of Object.entries(data.conteos)) {
+      if (lastStats[estado] !== undefined && lastStats[estado] !== count) {
+        cambios = true;
+      }
+    }
+    lastStats = { ...data.conteos };
+
+    if (cambios) {
+      mostrarToast('↻ Hay cambios nuevos — presiona R para refrescar');
+    }
+  } catch (_) { /* silencioso */ }
+}
+setInterval(silentRefresh, 60_000);
+</script>
+{% endblock %}

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Resumen del proceso de selección{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('candidatos.nuevo') }}" class="btn btn-primary">+ Nuevo candidato</a>
+<a href="{{ url_for('vacantes.nueva') }}" class="btn btn-secondary">+ Nueva vacante</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- KPIs -->
+<div class="stat-grid mb-24">
+  <div class="stat-card">
+    <div class="stat-label">Candidatos activos</div>
+    <div class="stat-value" style="color:#2563eb">{{ total_candidatos }}</div>
+    <div class="stat-sub">En la base de datos</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Vacantes abiertas</div>
+    <div class="stat-value" style="color:#16a34a">{{ total_vacantes }}</div>
+    <div class="stat-sub">Disponibles hoy</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">En proceso</div>
+    <div class="stat-value" style="color:#d97706">{{ en_proceso }}</div>
+    <div class="stat-sub">Aplicaciones activas</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Contratados</div>
+    <div class="stat-value" style="color:#16a34a">{{ contratados }}</div>
+    <div class="stat-sub">Total histórico</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Rechazados</div>
+    <div class="stat-value" style="color:#dc2626">{{ rechazados }}</div>
+    <div class="stat-sub">Total histórico</div>
+  </div>
+</div>
+
+<div class="grid-2">
+
+  <!-- Candidatos por estado -->
+  <div class="card">
+    <div class="card-title">Distribución por estado</div>
+    {% if estados_data %}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      {% set max_val = estados_data.values()|max %}
+      {% for nombre, count in estados_data.items() %}
+      <div>
+        <div class="flex justify-between mb-4" style="margin-bottom:4px">
+          <span class="text-sm">{{ nombre }}</span>
+          <span class="text-sm font-mono">{{ count }}</span>
+        </div>
+        <div style="height:6px;background:#f0ede6;border-radius:3px">
+          <div style="height:6px;border-radius:3px;background:#2563eb;width:{{ (count/max_val*100)|round }}%"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted text-sm">Aún no hay aplicaciones registradas.</p>
+    {% endif %}
+  </div>
+
+  <!-- Últimas aplicaciones -->
+  <div class="card">
+    <div class="card-title">Actividad reciente</div>
+    {% if ultimas_aplicaciones %}
+    <div class="timeline">
+      {% for ap in ultimas_aplicaciones %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">
+            <a href="{{ url_for('candidatos.detalle', cedula=ap.cedula_candidato) }}"
+               style="color:inherit;text-decoration:none">
+              {{ ap.candidato.nombre_completo }}
+            </a>
+          </div>
+          <div class="timeline-meta">
+            {{ ap.vacante.titulo }} ·
+            <span class="badge badge-blue" style="font-size:11px">{{ ap.estado_legible }}</span>
+          </div>
+          <div class="timeline-meta">{{ ap.fecha_aplicacion.strftime('%d %b %Y, %H:%M') }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted text-sm">Sin actividad reciente.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<div class="card mb-24">
+  <div class="card-title">Métricas (datos en vivo)</div>
+  <p class="text-muted text-sm mb-16">Embudo por estado, conversión por vacante y tiempo promedio entre hitos del historial.</p>
+  <div class="grid-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start;">
+    <div>
+      <div class="text-sm font-500 mb-8">Embudo de selección</div>
+      <div class="dashboard-chart-wrap"><canvas id="chartEmbudo"></canvas></div>
+    </div>
+    <div>
+      <div class="text-sm font-500 mb-8">Conversión por vacante (% contratados)</div>
+      <div class="dashboard-chart-wrap"><canvas id="chartConversion"></canvas></div>
+    </div>
+    <div>
+      <div class="text-sm font-500 mb-8">Tiempo promedio hasta cada estado (h)</div>
+      <div class="dashboard-chart-wrap"><canvas id="chartTiempo"></canvas></div>
+    </div>
+  </div>
+  <style>
+    /* Chart.js con maintainAspectRatio:false necesita padre con altura fija; si no, el canvas estira la página sin límite */
+    .dashboard-chart-wrap {
+      position: relative;
+      height: 300px;
+      width: 100%;
+      max-height: 300px;
+    }
+    @media (max-width: 1100px) {
+      .grid-3 { grid-template-columns: 1fr !important; }
+    }
+  </style>
+</div>
+
+{% if current_user.es_admin %}
+<div class="card mb-24" id="card-sesgos">
+  <div class="card-title">Alertas de sesgo (rechazos por ciudad)</div>
+  <div id="sesgos-body" class="text-sm text-muted">Cargando…</div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const URL_EMBUDO = "{{ url_for('dashboard.api_embudo') }}";
+  const URL_CONV = "{{ url_for('dashboard.api_conversion_vacante') }}";
+  const URL_TIEMPO = "{{ url_for('dashboard.api_tiempo_etapa') }}";
+
+  const chartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+  };
+
+  async function loadCharts() {
+    try {
+      const [embudo, conv, tiempo] = await Promise.all([
+        fetch(URL_EMBUDO).then(r => r.json()),
+        fetch(URL_CONV).then(r => r.json()),
+        fetch(URL_TIEMPO).then(r => r.json()),
+      ]);
+
+      const ctxE = document.getElementById('chartEmbudo');
+      if (ctxE && embudo.length) {
+        new Chart(ctxE, {
+          type: 'bar',
+          data: {
+            labels: embudo.map(d => d.nombre.length > 18 ? d.nombre.slice(0, 16) + '…' : d.nombre),
+            datasets: [{
+              label: 'Aplicaciones',
+              data: embudo.map(d => d.count),
+              backgroundColor: 'rgba(37, 99, 235, 0.65)',
+              borderRadius: 4,
+            }],
+          },
+          options: { ...chartOpts, scales: { x: { ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 } } }, y: { beginAtZero: true } } },
+        });
+      }
+
+      const ctxC = document.getElementById('chartConversion');
+      if (ctxC && conv.length) {
+        const top = conv.slice(0, 8);
+        new Chart(ctxC, {
+          type: 'bar',
+          data: {
+            labels: top.map(d => d.titulo.length > 14 ? d.titulo.slice(0, 12) + '…' : d.titulo),
+            datasets: [{
+              label: '% contratados',
+              data: top.map(d => d.conversion_pct),
+              backgroundColor: 'rgba(22, 163, 74, 0.65)',
+              borderRadius: 4,
+            }],
+          },
+          options: { ...chartOpts, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
+        });
+      }
+
+      const ctxT = document.getElementById('chartTiempo');
+      if (ctxT && tiempo.length) {
+        const topT = tiempo.slice(0, 10);
+        new Chart(ctxT, {
+          type: 'bar',
+          data: {
+            labels: topT.map(d => d.nombre.length > 16 ? d.nombre.slice(0, 14) + '…' : d.nombre),
+            datasets: [{
+              label: 'Horas (prom.)',
+              data: topT.map(d => d.horas_promedio),
+              backgroundColor: 'rgba(217, 119, 6, 0.65)',
+              borderRadius: 4,
+            }],
+          },
+          options: { ...chartOpts, scales: { x: { ticks: { maxRotation: 40, font: { size: 9 } } }, y: { beginAtZero: true } } },
+        });
+      }
+    } catch (e) {
+      console.warn('Dashboard charts:', e);
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadCharts);
+  } else {
+    loadCharts();
+  }
+})();
+</script>
+{% if current_user.es_admin %}
+<script>
+(function() {
+  const el = document.getElementById('sesgos-body');
+  if (!el) return;
+  fetch("{{ url_for('dashboard.api_sesgos') }}")
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) { el.textContent = d.error; return; }
+      let html = '<p>Total rechazos: ' + (d.total_rechazos || 0) + '</p>';
+      if (d.alertas && d.alertas.length) {
+        html += '<ul style="margin:8px 0 0 18px;color:var(--amber);">';
+        d.alertas.forEach(a => { html += '<li>' + a.mensaje + '</li>'; });
+        html += '</ul>';
+      } else {
+        html += '<p class="text-muted">Sin alertas con los umbrales actuales.</p>';
+      }
+      if (d.por_ciudad && d.por_ciudad.length) {
+        html += '<p class="mt-12 font-500">Top ciudades (rechazos)</p><ul style="margin:4px 0 0 18px;">';
+        d.por_ciudad.slice(0, 6).forEach(x => { html += '<li>' + x.ciudad + ': ' + x.rechazos + '</li>'; });
+        html += '</ul>';
+      }
+      el.innerHTML = html;
+    })
+    .catch(() => { el.textContent = 'No se pudo cargar.'; });
+})();
+</script>
+{% endif %}
+{% endblock %}

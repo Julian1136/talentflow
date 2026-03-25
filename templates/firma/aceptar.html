@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Aceptación de documento{% endblock %}
+{% block page_title %}Confirmar aceptación{% endblock %}
+{% block page_sub %}{{ reg.tipo_documento or 'Documento' }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px;">
+  <p class="text-sm mb-16">
+    Al confirmar, registramos tu aceptación con referencia al documento indicado por RRHH.
+    Este flujo es una simulación de firma electrónica para fines de expediente digital.
+  </p>
+  <form method="post">
+    <button type="submit" class="btn btn-primary">Confirmo haber leído y acepto</button>
+  </form>
+</div>
+{% endblock %}

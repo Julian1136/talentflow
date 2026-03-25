@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Expediente — {{ candidato.nombre_completo }}{% endblock %}
+{% block page_title %}Expediente digital{% endblock %}
+{% block page_sub %}{{ candidato.nombre_completo }}{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('candidatos.detalle', cedula=candidato.cedula) }}" class="btn btn-secondary">Volver al perfil</a>
+{% endblock %}
+{% block content %}
+<div class="card mb-24">
+  <div class="card-title">Documentos</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Archivo</th><th>Aplicación</th><th></th></tr></thead>
+      <tbody>
+        {% for d in documentos %}
+        <tr>
+          <td class="font-mono text-sm">{{ d.fecha_subida.strftime('%d/%m/%Y %H:%M') if d.fecha_subida else '—' }}</td>
+          <td>{{ d.tipo_documento or '—' }}</td>
+          <td>{{ d.nombre_original or '—' }}</td>
+          <td class="text-sm text-muted">{{ d.id_aplicacion or '—' }}</td>
+          <td><a href="{{ url_for('candidatos.descargar_documento', doc_id=d.id) }}" class="btn btn-secondary btn-sm">Descargar</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted">Sin documentos</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="card">
+  <div class="card-title">Aplicaciones y estado</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Vacante</th><th>Estado</th><th>Score</th><th></th></tr></thead>
+      <tbody>
+        {% for ap in candidato.aplicaciones %}
+        <tr>
+          <td>{{ ap.vacante.titulo }}</td>
+          <td><span class="badge badge-blue">{{ ap.estado_legible }}</span></td>
+          <td class="font-mono text-sm">{{ ap.score if ap.score is not none else '—' }}</td>
+          <td><a href="{{ url_for('proceso.detalle', app_id=ap.id) }}" class="btn btn-secondary btn-sm">Proceso</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

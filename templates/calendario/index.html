@@ -1,0 +1,697 @@
+{% extends "base.html" %}
+
+{% block title %}Calendario de Entrevistas{% endblock %}
+{% block page_title %}Calendario de Entrevistas{% endblock %}
+{% block page_sub %}
+  {{ pendientes_hoy }} hoy · {{ pendientes_total }} pendientes totales
+{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="abrirModalProgramar()">+ Programar entrevista</button>
+{% endblock %}
+
+{% block head %}
+{# FullCalendar desde CDN #}
+<link  rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.11/index.global.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.11/index.global.min.js"></script>
+<style>
+/* ══════════════════════════════════════════════
+   LAYOUT CALENDARIO
+══════════════════════════════════════════════ */
+.cal-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .cal-layout { grid-template-columns: 1fr; }
+  .cal-sidebar { display: none; }
+}
+
+/* ── Wrapper del calendario ── */
+.cal-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  min-height: 600px;
+}
+
+/* ══════════════════════════════════════════════
+   OVERRIDES de FullCalendar para que encaje
+   con el design system de TalentFlow
+══════════════════════════════════════════════ */
+.fc { font-family: 'DM Sans', sans-serif !important; }
+.fc .fc-toolbar-title { font-size: 16px !important; font-weight: 600 !important; letter-spacing: -0.3px; }
+.fc .fc-button {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  font-size: 13px !important;
+  padding: 5px 12px !important;
+  font-family: 'DM Sans', sans-serif !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 400 !important;
+}
+.fc .fc-button:hover { background: var(--bg) !important; }
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+.fc .fc-button-group .fc-button { border-radius: 0 !important; }
+.fc .fc-button-group .fc-button:first-child { border-radius: 6px 0 0 6px !important; }
+.fc .fc-button-group .fc-button:last-child  { border-radius: 0 6px 6px 0 !important; }
+
+.fc-theme-standard td, .fc-theme-standard th { border-color: var(--border) !important; }
+.fc .fc-col-header-cell-cushion { font-size: 12px !important; font-weight: 600 !important;
+  color: var(--text3) !important; text-transform: uppercase; letter-spacing: .06em; padding: 8px 4px !important; }
+.fc .fc-daygrid-day-number { font-size: 12px !important; color: var(--text2) !important; padding: 4px 8px !important; }
+.fc .fc-day-today { background: var(--accent-light) !important; }
+.fc .fc-day-today .fc-daygrid-day-number { color: var(--accent) !important; font-weight: 600 !important; }
+.fc .fc-event { border-radius: 5px !important; border: none !important;
+  padding: 2px 6px !important; font-size: 12px !important; cursor: pointer !important; }
+.fc .fc-event:hover { filter: brightness(0.9); }
+.fc .fc-event-title { font-weight: 500 !important; }
+.fc .fc-toolbar { margin-bottom: 16px !important; flex-wrap: wrap; gap: 8px; }
+.fc .fc-more-link { font-size: 11px !important; color: var(--accent) !important; }
+.fc .fc-timegrid-slot { height: 36px !important; }
+.fc .fc-timegrid-axis { font-size: 11px !important; color: var(--text3) !important; }
+
+/* ══════════════════════════════════════════════
+   SIDEBAR DERECHO
+══════════════════════════════════════════════ */
+.cal-sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+.cal-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.cal-stat-title { font-size: 11px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+
+.proxima-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.proxima-item:last-child { border-bottom: none; padding-bottom: 0; }
+.proxima-hora {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 38px;
+  margin-top: 2px;
+}
+.proxima-info { flex: 1; min-width: 0; }
+.proxima-nombre { font-size: 13px; font-weight: 500; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proxima-vacante { font-size: 11px; color: var(--text3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.proxima-tipo {
+  font-size: 10px; font-weight: 600; padding: 2px 6px;
+  border-radius: 4px; margin-top: 4px; display: inline-block;
+}
+.tipo-reclutador { background: #eff6ff; color: #2563eb; }
+.tipo-jefe_area  { background: #f5f3ff; color: #7c3aed; }
+.tipo-gerencia   { background: #f0fdf4; color: #16a34a; }
+
+.cal-vacio { text-align: center; padding: 20px 0; color: var(--text3); font-size: 13px; }
+
+/* ══════════════════════════════════════════════
+   MODAL GENÉRICO
+══════════════════════════════════════════════ */
+.modal-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,.45);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 28px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  animation: modalIn 220ms cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes modalIn {
+  from { transform: scale(.94) translateY(12px); opacity: 0; }
+  to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+.modal-title {
+  font-size: 16px; font-weight: 600; margin-bottom: 20px;
+  letter-spacing: -0.3px; color: var(--text);
+}
+.modal-close {
+  position: absolute; top: 16px; right: 18px;
+  background: none; border: none; font-size: 20px; cursor: pointer;
+  color: var(--text3); line-height: 1;
+  transition: color .15s;
+}
+.modal-close:hover { color: var(--text); }
+
+/* ══════════════════════════════════════════════
+   POPOVER DE EVENTO (click en entrevista)
+══════════════════════════════════════════════ */
+#event-popover {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  z-index: 900;
+  display: none;
+  animation: popIn 180ms ease;
+}
+@keyframes popIn {
+  from { transform: scale(.95); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.pop-nombre { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.pop-vacante { font-size: 12px; color: var(--text3); margin-bottom: 10px; }
+.pop-row { display: flex; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+.pop-label { color: var(--text3); width: 80px; flex-shrink: 0; }
+.pop-val { color: var(--text); flex: 1; }
+.pop-actions { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Toast igual que en Kanban */
+#cal-toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--text); color: var(--surface);
+  padding: 10px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  z-index: 9999;
+  transform: translateY(80px); opacity: 0;
+  transition: transform 280ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease;
+  pointer-events: none;
+}
+#cal-toast.show { transform: translateY(0); opacity: 1; }
+#cal-toast.error { background: var(--red); color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cal-layout">
+
+  {# ── Calendario principal ── #}
+  <div class="cal-wrap">
+    <div id="calendar"></div>
+  </div>
+
+  {# ── Sidebar ── #}
+  <aside class="cal-sidebar">
+
+    {# Entrevistas de hoy #}
+    <div class="cal-stat">
+      <div class="cal-stat-title">Hoy · {{ entrevistas_hoy|length }} entrevista{{ 's' if entrevistas_hoy|length != 1 }}</div>
+      {% if entrevistas_hoy %}
+        {% for e in entrevistas_hoy %}
+        <div class="proxima-item">
+          <div class="proxima-hora">
+            {{ e.fecha_programada.strftime('%H:%M') if e.fecha_programada else '--:--' }}
+          </div>
+          <div class="proxima-info">
+            <div class="proxima-nombre">{{ e.aplicacion.candidato.nombre_completo }}</div>
+            <div class="proxima-vacante">{{ e.aplicacion.vacante.titulo }}</div>
+            <span class="proxima-tipo tipo-{{ e.tipo or 'reclutador' }}">
+              {{ {'reclutador':'RH','jefe_area':'Jefe área','gerencia':'Gerencia'}.get(e.tipo, e.tipo or '—') }}
+            </span>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="cal-vacio">Sin entrevistas hoy</div>
+      {% endif %}
+    </div>
+
+    {# Próximos 7 días #}
+    <div class="cal-stat">
+      <div class="cal-stat-title">Próximos 7 días</div>
+      {% if proximas %}
+        {% for e in proximas %}
+        <div class="proxima-item">
+          <div class="proxima-hora">
+            {{ e.fecha_programada.strftime('%d/%m') if e.fecha_programada else '—' }}
+          </div>
+          <div class="proxima-info">
+            <div class="proxima-nombre">{{ e.aplicacion.candidato.nombre_completo }}</div>
+            <div class="proxima-vacante">{{ e.aplicacion.vacante.titulo }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="cal-vacio">Sin entrevistas esta semana</div>
+      {% endif %}
+    </div>
+
+    {# Leyenda de tipos #}
+    <div class="cal-stat">
+      <div class="cal-stat-title">Tipos de entrevista</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#2563eb;flex-shrink:0;"></span>
+          Recursos Humanos
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#7c3aed;flex-shrink:0;"></span>
+          Jefe de Área
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#0f766e;flex-shrink:0;"></span>
+          Gerencia
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></span>
+          Realizada
+        </div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+{# ══════════════════════════════════════════════
+   MODAL — Programar nueva entrevista
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-programar">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModal('modal-programar')">×</button>
+    <div class="modal-title">Programar entrevista</div>
+
+    <form id="form-programar">
+      <div class="form-grid">
+
+        <div class="form-full form-group">
+          <label class="form-label">Aplicación (candidato → vacante) <span>*</span></label>
+          <select name="app_id" id="sel-aplicacion" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            {# Se carga dinámicamente vía JS — ver fetchAplicaciones() #}
+          </select>
+          <div class="form-hint">Busca por nombre o vacante</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tipo <span>*</span></label>
+          <select name="tipo" class="form-select" required>
+            <option value="reclutador">Recursos Humanos</option>
+            <option value="jefe_area">Jefe de Área</option>
+            <option value="gerencia">Gerencia</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Entrevistador</label>
+          <select name="id_entrevistador" class="form-select">
+            <option value="">Asignar más tarde</option>
+            {% for u in usuarios %}
+            <option value="{{ u.id }}"
+              {% if u.id == current_user.id %}selected{% endif %}>
+              {{ u.nombre_completo }} ({{ u.rol.nombre }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Fecha y hora <span>*</span></label>
+          <input type="datetime-local" name="fecha_programada" class="form-input" required
+                 id="inp-fecha">
+        </div>
+
+        <div class="form-full form-group">
+          <label class="form-label">Lugar / Enlace de videollamada</label>
+          <input type="text" name="lugar" class="form-input"
+                 placeholder="Ej: Oficina piso 3, sala B · o: https://meet.google.com/...">
+        </div>
+
+      </div>
+
+      <div id="email-hint" style="font-size:12px;color:var(--green);margin:12px 0 0;display:none;">
+        ✓ Se enviará un correo automático de citación al candidato
+      </div>
+
+      <div class="flex gap-8" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary" id="btn-programar">Programar y notificar</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-programar')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════
+   MODAL — Registrar resultado de entrevista
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-resultado">
+  <div class="modal-box" style="max-width:400px;">
+    <button class="modal-close" onclick="cerrarModal('modal-resultado')">×</button>
+    <div class="modal-title">Registrar resultado</div>
+    <form id="form-resultado">
+      <input type="hidden" name="ent_id" id="res-ent-id">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Candidato</label>
+        <p id="res-candidato" style="font-size:14px;font-weight:500;margin:4px 0;"></p>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Resultado <span>*</span></label>
+        <select name="resultado" class="form-select" required>
+          <option value="">Seleccionar...</option>
+          <option value="apto">✓ Apto</option>
+          <option value="no_apto">✗ No apto</option>
+          <option value="aplazado">◌ Aplazado</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:20px;">
+        <label class="form-label">Observaciones</label>
+        <textarea name="observaciones" class="form-textarea" rows="3"
+                  placeholder="Fortalezas, brechas, recomendaciones..."></textarea>
+      </div>
+      <div class="flex gap-8">
+        <button type="submit" class="btn btn-primary">Guardar resultado</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-resultado')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# Popover de evento #}
+<div id="event-popover">
+  <div class="pop-nombre" id="pop-nombre"></div>
+  <div class="pop-vacante" id="pop-vacante"></div>
+  <div class="pop-row"><span class="pop-label">Tipo</span><span class="pop-val" id="pop-tipo"></span></div>
+  <div class="pop-row"><span class="pop-label">Lugar</span><span class="pop-val" id="pop-lugar"></span></div>
+  <div class="pop-row"><span class="pop-label">Entrevistador</span><span class="pop-val" id="pop-entrev"></span></div>
+  <div class="pop-row"><span class="pop-label">Estado</span><span class="pop-val" id="pop-result"></span></div>
+  <div class="pop-actions" id="pop-actions"></div>
+</div>
+
+<div id="cal-toast"></div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+/* ══════════════════════════════════════════════
+   URLs y configuración
+══════════════════════════════════════════════ */
+const EVENTOS_URL    = "{{ url_for('calendario.eventos') }}";
+const PROGRAMAR_URL  = "{{ url_for('calendario.programar') }}";
+const RESULTADO_BASE = "/calendario/resultado/";  // + id
+const PROCESO_BASE   = "/proceso/";               // + app_id
+const ES_RECLUTADOR  = {{ 'true' if current_user.es_reclutador else 'false' }};
+
+/* ══════════════════════════════════════════════
+   Toast
+══════════════════════════════════════════════ */
+let _toastTimer;
+function toast(msg, err = false) {
+  const t = document.getElementById('cal-toast');
+  t.textContent = msg;
+  t.className = 'show' + (err ? ' error' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.className = '', 3000);
+}
+
+/* ══════════════════════════════════════════════
+   Modales
+══════════════════════════════════════════════ */
+function abrirModal(id)  { document.getElementById(id).classList.add('open'); }
+function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function abrirModalProgramar(appId = null, fecha = null) {
+  if (appId) document.getElementById('sel-aplicacion').value = appId;
+  if (fecha) document.getElementById('inp-fecha').value = fecha;
+  document.getElementById('email-hint').style.display = 'block';
+  cargarAplicaciones();
+  abrirModal('modal-programar');
+}
+
+/* Cerrar al hacer click fuera del modal-box */
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+});
+
+/* ══════════════════════════════════════════════
+   Cargar aplicaciones activas para el <select>
+══════════════════════════════════════════════ */
+let _appsCache = null;
+async function cargarAplicaciones() {
+  if (_appsCache) return;
+  try {
+    const r = await fetch("{{ url_for('kanban.datos_columna', estado='hoja_de_vida_recibida') }}".replace('hoja_de_vida_recibida', 'contactado'));
+    // Cargamos todas via el endpoint de stats y luego hits individuales no, usamos un endpoint general
+    // Fallback: mostrar texto de búsqueda
+  } catch (_) {}
+
+  // Carga simple desde el DOM existente del sidebar
+  // El select de aplicaciones lo llenamos con un fetch a nuestra API de stats
+  // Para mantener el código limpio, usamos el endpoint de kanban que ya existe
+  const sel = document.getElementById('sel-aplicacion');
+  if (sel.options.length > 1) return;
+
+  // Cargar TODAS las aplicaciones activas
+  try {
+    const estados = [
+      'hoja_de_vida_recibida','en_revision','contactado',
+      'entrevista_programada','entrevista_realizada',
+      'evaluacion_psicologica_pendiente','en_pruebas_tecnicas'
+    ];
+    const promesas = estados.map(e =>
+      fetch(`/kanban/columna/${e}`).then(r => r.json())
+    );
+    const resultados = await Promise.all(promesas);
+    const todas = resultados.flatMap(r => r.aplicaciones || []);
+
+    todas.forEach(ap => {
+      const opt = document.createElement('option');
+      opt.value = ap.id;
+      opt.textContent = `${ap.candidato} → ${ap.vacante}`;
+      sel.appendChild(opt);
+    });
+    _appsCache = true;
+  } catch(e) {
+    console.warn('No se pudieron cargar aplicaciones:', e);
+  }
+}
+
+/* ══════════════════════════════════════════════
+   Formulario: Programar entrevista
+══════════════════════════════════════════════ */
+document.getElementById('form-programar').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-programar');
+  btn.textContent = 'Programando...';
+  btn.disabled = true;
+
+  const data = Object.fromEntries(new FormData(this));
+
+  try {
+    const r = await fetch(PROGRAMAR_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const res = await r.json();
+
+    if (res.ok) {
+      cerrarModal('modal-programar');
+      calendar.refetchEvents();
+      const msg = res.email_enviado
+        ? `✓ Entrevista programada · Correo enviado a ${res.candidato}`
+        : `✓ Entrevista programada para ${res.candidato}`;
+      toast(msg);
+      this.reset();
+      _appsCache = null;
+    } else {
+      toast(res.error || 'Error al programar.', true);
+    }
+  } catch (_) {
+    toast('Error de conexión.', true);
+  } finally {
+    btn.textContent = 'Programar y notificar';
+    btn.disabled = false;
+  }
+});
+
+/* ══════════════════════════════════════════════
+   Formulario: Registrar resultado
+══════════════════════════════════════════════ */
+document.getElementById('form-resultado').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const fd  = new FormData(this);
+  const id  = fd.get('ent_id');
+  const res = fd.get('resultado');
+  const obs = fd.get('observaciones');
+
+  try {
+    const r = await fetch(`${RESULTADO_BASE}${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resultado: res, observaciones: obs }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      cerrarModal('modal-resultado');
+      cerrarPopover();
+      calendar.refetchEvents();
+      toast(`✓ Resultado "${res}" registrado`);
+    } else {
+      toast(data.error || 'Error al guardar.', true);
+    }
+  } catch (_) {
+    toast('Error de conexión.', true);
+  }
+});
+
+/* ══════════════════════════════════════════════
+   Popover de evento
+══════════════════════════════════════════════ */
+const popover = document.getElementById('event-popover');
+function mostrarPopover(info) {
+  const props = info.event.extendedProps;
+  const rect  = info.el.getBoundingClientRect();
+
+  document.getElementById('pop-nombre').textContent  = props.candidato;
+  document.getElementById('pop-vacante').textContent = `${props.vacante}${props.area ? ' · ' + props.area : ''}`;
+
+  const tipoTexto = {reclutador:'Recursos Humanos', jefe_area:'Jefe de Área', gerencia:'Gerencia'};
+  document.getElementById('pop-tipo').textContent   = tipoTexto[props.tipo] || props.tipo || '—';
+  document.getElementById('pop-lugar').textContent  = props.lugar;
+  document.getElementById('pop-entrev').textContent = props.entrevistador;
+
+  const resTexto = {pendiente:'⏳ Pendiente', apto:'✓ Apto', no_apto:'✗ No apto', aplazado:'◌ Aplazado'};
+  document.getElementById('pop-result').textContent = resTexto[props.resultado] || props.resultado;
+
+  const actions = document.getElementById('pop-actions');
+  actions.innerHTML = `
+    <a href="${PROCESO_BASE}${props.app_id}" class="btn btn-secondary btn-sm">Ver proceso</a>
+    ${props.resultado === 'pendiente' && ES_RECLUTADOR
+      ? `<button class="btn btn-primary btn-sm" onclick="abrirModalResultado(${info.event.id}, '${props.candidato}')">Registrar resultado</button>`
+      : ''}
+  `;
+
+  // Posicionar
+  const pw = 280, ph = 220;
+  let x = rect.left + window.scrollX;
+  let y = rect.bottom + window.scrollY + 6;
+  if (x + pw > window.innerWidth - 12) x = window.innerWidth - pw - 12;
+  if (y + ph > window.innerHeight + window.scrollY - 12) y = rect.top + window.scrollY - ph - 6;
+
+  popover.style.left    = x + 'px';
+  popover.style.top     = y + 'px';
+  popover.style.display = 'block';
+}
+
+function cerrarPopover() { popover.style.display = 'none'; }
+document.addEventListener('click', e => {
+  if (!popover.contains(e.target) && !e.target.closest('.fc-event')) {
+    cerrarPopover();
+  }
+});
+
+function abrirModalResultado(entId, candidato) {
+  document.getElementById('res-ent-id').value     = entId;
+  document.getElementById('res-candidato').textContent = candidato;
+  cerrarPopover();
+  abrirModal('modal-resultado');
+}
+
+/* ══════════════════════════════════════════════
+   FullCalendar — inicialización
+══════════════════════════════════════════════ */
+let calendar;
+document.addEventListener('DOMContentLoaded', () => {
+  const calEl = document.getElementById('calendar');
+
+  calendar = new FullCalendar.Calendar(calEl, {
+    locale: 'es',
+    initialView: 'dayGridMonth',
+    headerToolbar: {
+      left:   'prev,next today',
+      center: 'title',
+      right:  'dayGridMonth,timeGridWeek,listWeek',
+    },
+    buttonText: {
+      today:    'Hoy',
+      month:    'Mes',
+      week:     'Semana',
+      list:     'Lista',
+    },
+    height: 'auto',
+    eventDisplay: 'block',
+    dayMaxEvents: 3,
+
+    /* Fuente de datos: nuestro endpoint Flask */
+    events: {
+      url:         EVENTOS_URL,
+      method:      'GET',
+      extraParams: {},
+      failure() { toast('Error al cargar los eventos del calendario.', true); },
+    },
+
+    /* Click en evento → mostrar popover */
+    eventClick(info) {
+      info.jsEvent.stopPropagation();
+      mostrarPopover(info);
+    },
+
+    /* Click en un día vacío → abrir modal pre-rellenado con la fecha */
+    dateClick(info) {
+      if (!ES_RECLUTADOR) return;
+      const fechaLocal = info.dateStr + 'T09:00';
+      abrirModalProgramar(null, fechaLocal);
+    },
+
+    /* Arrastar evento → reprogramar (solo reclutadores) */
+    editable: ES_RECLUTADOR,
+    eventDrop(info) {
+      const fecha = info.event.start.toISOString().slice(0, 16);
+      fetch(PROGRAMAR_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          app_id:           info.event.extendedProps.app_id,
+          tipo:             info.event.extendedProps.tipo,
+          lugar:            info.event.extendedProps.lugar,
+          id_entrevistador: null,
+          fecha_programada: fecha,
+          _reprogramar:     true,  // señal para el backend (ignorada pero útil para logs)
+        }),
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.ok) { info.revert(); toast(d.error, true); }
+        else toast('✓ Entrevista reprogramada');
+      })
+      .catch(() => { info.revert(); toast('Error de conexión.', true); });
+    },
+
+    eventMouseEnter(info) { info.el.style.cursor = 'pointer'; },
+    eventMouseLeave(info) { info.el.style.cursor = ''; },
+  });
+
+  calendar.render();
+});
+</script>
+{% endblock %}

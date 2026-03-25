@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ vacante.titulo }}{% endblock %}
+{% block page_title %}{{ vacante.titulo }}{% endblock %}
+{% block page_sub %}Vacante en {{ vacante.area }}{% endblock %}
+
+{% block topbar_actions %}
+{% if vacante.estado == 'abierta' and current_user.es_reclutador %}
+<a href="{{ url_for('candidatos.lista') }}?vacante={{ vacante.id }}" class="btn btn-primary">Asignar candidatos</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Información de la vacante</div>
+    <div class="grid-2">
+      <div><span class="text-muted">Área:</span> {{ vacante.area or '-' }}</div>
+      <div><span class="text-muted">Ciudad:</span> {{ vacante.ciudad or '-' }}</div>
+      <div><span class="text-muted">Tipo contrato:</span> {{ vacante.tipo_contrato or '-' }}</div>
+      <div><span class="text-muted">Salario:</span> {% if vacante.salario_min %}COP {{ vacante.salario_min }} - {{ vacante.salario_max }}{% else %}No especificado{% endif %}</div>
+      <div><span class="text-muted">Fecha apertura:</span> {{ vacante.fecha_apertura.strftime('%d/%m/%Y') }}</div>
+      <div><span class="text-muted">Estado:</span> <span class="badge badge-{{ 'green' if vacante.estado == 'abierta' else 'gray' }}">{{ vacante.estado }}</span></div>
+    </div>
+    <hr class="my-16">
+    <div class="card-title mb-8">Descripción</div>
+    <p>{{ vacante.descripcion or 'Sin descripción' }}</p>
+    <div class="card-title mb-8 mt-16">Requisitos</div>
+    <p>{{ vacante.requisitos or 'No especificados' }}</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Candidatos aplicados ({{ vacante.aplicaciones|length }})</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Candidato</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+          {% for app in vacante.aplicaciones %}
+          <tr>
+            <td>{{ app.candidato.nombre_completo }}</td>
+            <td>{{ app.fecha_aplicacion.strftime('%d/%m/%Y') }}</td>
+            <td><span class="badge badge-blue">{{ app.estado_legible }}</span></td>
+            <td><a href="{{ url_for('proceso.detalle', app_id=app.id) }}" class="btn btn-secondary btn-xs">Ver proceso</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-muted">Aún no hay aplicaciones</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

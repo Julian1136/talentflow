@@ -1,0 +1,32 @@
+# Entorno
+.venv/
+venv/
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/launch.json
+*.swp
+.DS_Store
+Thumbs.db
+
+# Subidas (contenido local; no versionar archivos de usuarios)
+uploads/**/*
+!uploads/.gitkeep
+
+# Logs / DB local accidental
+*.log
+*.sqlite3

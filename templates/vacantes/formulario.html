@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva vacante{% endblock %}
+{% block page_title %}Nueva vacante{% endblock %}
+{% block page_sub %}Registro de posición{% endblock %}
+
+{% block content %}
+<div class="card">
+  <form method="POST">
+    <div class="form-grid">
+      <div class="form-full">
+        <label class="form-label">Título <span>*</span></label>
+        <input type="text" name="titulo" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Área</label>
+        <input type="text" name="area" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ciudad</label>
+        <input type="text" name="ciudad" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo contrato</label>
+        <input type="text" name="tipo_contrato" class="form-input" placeholder="Ej: Término indefinido">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Salario mínimo (COP)</label>
+        <input type="number" step="any" name="salario_min" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Salario máximo (COP)</label>
+        <input type="number" step="any" name="salario_max" class="form-input">
+      </div>
+      <div class="form-full">
+        <label class="form-label">Descripción</label>
+        <textarea name="descripcion" class="form-textarea" rows="4"></textarea>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Requisitos</label>
+        <textarea name="requisitos" class="form-textarea" rows="4"></textarea>
+      </div>
+    </div>
+    <div class="flex gap-8 mt-24">
+      <button type="submit" class="btn btn-primary">Crear vacante</button>
+      <a href="{{ url_for('vacantes.lista') }}" class="btn btn-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
