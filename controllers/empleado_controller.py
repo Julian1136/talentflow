@@ -44,6 +44,25 @@ def _require_admin():
         abort(403)
 
 
+def _empleado_o_403(emp_id: int) -> Empleado:
+    emp = db.session.get(Empleado, emp_id)
+    if not emp:
+        abort(404)
+    if not current_user.is_authenticated:
+        abort(403)
+    if not current_user.es_rrhh and (not emp.id_usuario or emp.id_usuario != current_user.id):
+        abort(403)
+    return emp
+
+
+def _asignacion_actual(emp: Empleado) -> AsignacionLaboral | None:
+    return (
+        AsignacionLaboral.query.filter_by(id_empleado=emp.id, es_actual=True)
+        .order_by(AsignacionLaboral.id.desc())
+        .first()
+    )
+
+
 def _as_date(raw: str | None) -> date | None:
     if not raw:
         return None
@@ -207,27 +226,98 @@ def mi_espacio():
     )
 
 
-@empleados_bp.route("/<int:emp_id>")
+@empleados_bp.route("/<int:emp_id>/ficha")
 @login_required
-def detalle(emp_id: int):
-    emp = db.session.get(Empleado, emp_id)
-    if not emp:
-        abort(404)
-    if not current_user.es_rrhh and (not emp.id_usuario or emp.id_usuario != current_user.id):
-        abort(403)
+def expediente_ficha(emp_id: int):
+    emp = _empleado_o_403(emp_id)
+    return render_template(
+        "empleados/expediente/ficha.html",
+        empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="ficha",
+    )
 
+
+@empleados_bp.route("/<int:emp_id>/movimientos")
+@login_required
+def expediente_movimientos(emp_id: int):
+    emp = _empleado_o_403(emp_id)
     sedes = Sede.query.filter_by(activa=True).order_by(Sede.nombre).all()
     cargos = Cargo.query.filter_by(activo=True).order_by(Cargo.nombre).all()
     jefes = Usuario.query.filter_by(activo=True).order_by(Usuario.nombres).all()
-    plantillas = PlantillaDesempenoCargo.query.filter_by(activa=True).order_by(PlantillaDesempenoCargo.nombre).all()
     return render_template(
-        "empleados/detalle.html",
+        "empleados/expediente/movimientos.html",
         empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="movimientos",
         sedes=sedes,
         cargos=cargos,
         jefes=jefes,
-        plantillas=plantillas,
         tipos_movimiento=TIPOS_MOVIMIENTO_LABORAL,
+    )
+
+
+@empleados_bp.route("/<int:emp_id>/evaluaciones")
+@login_required
+def expediente_evaluaciones(emp_id: int):
+    emp = _empleado_o_403(emp_id)
+    jefes = Usuario.query.filter_by(activo=True).order_by(Usuario.nombres).all()
+    plantillas = PlantillaDesempenoCargo.query.filter_by(activa=True).order_by(PlantillaDesempenoCargo.nombre).all()
+    return render_template(
+        "empleados/expediente/evaluaciones.html",
+        empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="evaluaciones",
+        jefes=jefes,
+        plantillas=plantillas,
+    )
+
+
+@empleados_bp.route("/<int:emp_id>/onboarding")
+@login_required
+def expediente_onboarding(emp_id: int):
+    emp = _empleado_o_403(emp_id)
+    return render_template(
+        "empleados/expediente/onboarding.html",
+        empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="onboarding",
+    )
+
+
+@empleados_bp.route("/<int:emp_id>/disciplina")
+@login_required
+def expediente_disciplina(emp_id: int):
+    emp = _empleado_o_403(emp_id)
+    return render_template(
+        "empleados/expediente/disciplina.html",
+        empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="disciplina",
+    )
+
+
+@empleados_bp.route("/<int:emp_id>/documentos")
+@login_required
+def expediente_documentos(emp_id: int):
+    emp = _empleado_o_403(emp_id)
+    return render_template(
+        "empleados/expediente/documentos.html",
+        empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="documentos",
+    )
+
+
+@empleados_bp.route("/<int:emp_id>")
+@login_required
+def detalle(emp_id: int):
+    emp = _empleado_o_403(emp_id)
+    return render_template(
+        "empleados/expediente/resumen.html",
+        empleado=emp,
+        asignacion_actual=_asignacion_actual(emp),
+        expediente_section="resumen",
     )
 
 
@@ -244,7 +334,7 @@ def toggle_onboarding_tarea(emp_id: int, tid: int):
     t.hecha = not bool(t.hecha)
     db.session.commit()
     flash("Tarea de onboarding actualizada.", "success")
-    return redirect(url_for("empleados.detalle", emp_id=emp.id))
+    return redirect(url_for("empleados.expediente_onboarding", emp_id=emp.id))
 
 
 @empleados_bp.route("/<int:emp_id>/movimiento", methods=["POST"])
@@ -264,13 +354,13 @@ def registrar_movimiento(emp_id: int):
 
     if not tipo or not id_cargo or not id_sede:
         flash("Tipo de movimiento, cargo y sede son obligatorios.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=emp.id))
+        return redirect(url_for("empleados.expediente_movimientos", emp_id=emp.id, _anchor="form-movimiento"))
 
     cargo = db.session.get(Cargo, id_cargo)
     sede = db.session.get(Sede, id_sede)
     if not cargo or not sede:
         flash("Cargo o sede no válidos.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=emp.id))
+        return redirect(url_for("empleados.expediente_movimientos", emp_id=emp.id, _anchor="form-movimiento"))
 
     anterior = (
         AsignacionLaboral.query.filter_by(id_empleado=emp.id, es_actual=True)
@@ -312,7 +402,7 @@ def registrar_movimiento(emp_id: int):
     )
     db.session.commit()
     flash("Movimiento laboral registrado.", "success")
-    return redirect(url_for("empleados.detalle", emp_id=emp.id))
+    return redirect(url_for("empleados.expediente_movimientos", emp_id=emp.id))
 
 
 @empleados_bp.route("/<int:emp_id>/evaluacion", methods=["POST"])
@@ -327,7 +417,7 @@ def registrar_evaluacion(emp_id: int):
     plantilla = db.session.get(PlantillaDesempenoCargo, plantilla_id) if plantilla_id else None
     if not plantilla:
         flash("Plantilla de desempeño no válida.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=emp.id))
+        return redirect(url_for("empleados.expediente_evaluaciones", emp_id=emp.id, _anchor="form-evaluacion"))
 
     try:
         criterios = json.loads(plantilla.criterios_json or "[]")
@@ -335,7 +425,7 @@ def registrar_evaluacion(emp_id: int):
         criterios = []
     if not criterios:
         flash("La plantilla no tiene criterios válidos.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=emp.id))
+        return redirect(url_for("empleados.expediente_evaluaciones", emp_id=emp.id, _anchor="form-evaluacion"))
 
     detalle = {}
     ponderado = 0.0
@@ -377,7 +467,7 @@ def registrar_evaluacion(emp_id: int):
     )
     db.session.commit()
     flash("Evaluación de desempeño registrada.", "success")
-    return redirect(url_for("empleados.detalle", emp_id=emp.id))
+    return redirect(url_for("empleados.expediente_evaluaciones", emp_id=emp.id))
 
 
 @empleados_bp.route("/evaluacion/<int:ev_id>/aceptar", methods=["POST"])
@@ -393,7 +483,7 @@ def aceptar_evaluacion(ev_id: int):
     accion = (request.form.get("accion") or "").strip()
     if accion not in ("aceptar", "rechazar"):
         flash("Acción no válida.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=empleado.id))
+        return redirect(url_for("empleados.expediente_evaluaciones", emp_id=empleado.id))
 
     ev.estado_aceptacion = "aceptada" if accion == "aceptar" else "rechazada"
     ev.comentario_empleado = request.form.get("comentario_empleado")
@@ -407,7 +497,7 @@ def aceptar_evaluacion(ev_id: int):
     )
     db.session.commit()
     flash("Respuesta de evaluación registrada.", "success")
-    return redirect(url_for("empleados.detalle", emp_id=empleado.id))
+    return redirect(url_for("empleados.expediente_evaluaciones", emp_id=empleado.id))
 
 
 @empleados_bp.route("/<int:emp_id>/disciplina", methods=["POST"])
@@ -431,12 +521,12 @@ def registrar_disciplina(emp_id: int):
     )
     if not nov.descripcion:
         flash("La descripción de la novedad es obligatoria.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=emp.id))
+        return redirect(url_for("empleados.expediente_disciplina", emp_id=emp.id, _anchor="form-disciplina"))
     db.session.add(nov)
     registrar_evento_laboral(emp, "novedad_disciplinaria", "Novedad disciplinaria registrada.", current_user.id)
     db.session.commit()
     flash("Novedad disciplinaria registrada.", "success")
-    return redirect(url_for("empleados.detalle", emp_id=emp.id))
+    return redirect(url_for("empleados.expediente_disciplina", emp_id=emp.id))
 
 
 @empleados_bp.route("/<int:emp_id>/desvincular", methods=["POST"])
@@ -451,7 +541,7 @@ def desvincular(emp_id: int):
     fecha_ef = _as_date(request.form.get("fecha_efectiva")) or date.today()
     if not tipo:
         flash("Tipo de salida obligatorio.", "danger")
-        return redirect(url_for("empleados.detalle", emp_id=emp.id))
+        return redirect(url_for("empleados.expediente_disciplina", emp_id=emp.id))
 
     reg = Desvinculacion(
         id_empleado=emp.id,
@@ -485,7 +575,7 @@ def desvincular(emp_id: int):
     )
     db.session.commit()
     flash("Desvinculación registrada.", "warning")
-    return redirect(url_for("empleados.detalle", emp_id=emp.id))
+    return redirect(url_for("empleados.expediente_disciplina", emp_id=emp.id))
 
 
 @empleados_bp.route("/api/<int:emp_id>/timeline")

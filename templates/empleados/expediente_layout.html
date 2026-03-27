@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{% block expediente_title %}Expediente{% endblock %} — TalentFlow{% endblock %}
+{% block page_title %}Expediente laboral{% endblock %}
+{% block page_sub %}{{ empleado.candidato.nombre_completo if empleado.candidato else empleado.cedula }}{% endblock %}
+
+{% block content %}
+<div class="hr-cat-wrap emp-expediente-wrap">
+  <nav class="hr-cat-subnav" aria-label="Secciones del expediente">
+    <a href="{{ url_for('empleados.detalle', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'resumen' else '' }}">
+      <span class="hr-cat-subnav__icon">📊</span>
+      <span>
+        <span class="hr-cat-subnav__t">Resumen</span>
+        <span class="hr-cat-subnav__d">Vista general y accesos rápidos</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.expediente_ficha', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'ficha' else '' }}">
+      <span class="hr-cat-subnav__icon">📋</span>
+      <span>
+        <span class="hr-cat-subnav__t">Ficha laboral</span>
+        <span class="hr-cat-subnav__d">Datos actuales y vínculo candidato</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.expediente_movimientos', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'movimientos' else '' }}">
+      <span class="hr-cat-subnav__icon">🔄</span>
+      <span>
+        <span class="hr-cat-subnav__t">Movimientos</span>
+        <span class="hr-cat-subnav__d">Historial y altas o cambios</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.expediente_evaluaciones', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'evaluaciones' else '' }}">
+      <span class="hr-cat-subnav__icon">⭐</span>
+      <span>
+        <span class="hr-cat-subnav__t">Evaluaciones</span>
+        <span class="hr-cat-subnav__d">Desempeño y aceptaciones</span>
+      </span>
+    </a>
+    {% if empleado.tareas_onboarding %}
+    <a href="{{ url_for('empleados.expediente_onboarding', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'onboarding' else '' }}">
+      <span class="hr-cat-subnav__icon">🚀</span>
+      <span>
+        <span class="hr-cat-subnav__t">Onboarding</span>
+        <span class="hr-cat-subnav__d">Checklist de ingreso</span>
+      </span>
+    </a>
+    {% endif %}
+    <a href="{{ url_for('empleados.expediente_disciplina', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'disciplina' else '' }}">
+      <span class="hr-cat-subnav__icon">⚠️</span>
+      <span>
+        <span class="hr-cat-subnav__t">Disciplina y salida</span>
+        <span class="hr-cat-subnav__d">Novedades y desvinculación</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.expediente_documentos', emp_id=empleado.id) }}" class="{{ 'is-active' if expediente_section == 'documentos' else '' }}">
+      <span class="hr-cat-subnav__icon">📎</span>
+      <span>
+        <span class="hr-cat-subnav__t">Documentos</span>
+        <span class="hr-cat-subnav__d">Archivos y vista previa</span>
+      </span>
+    </a>
+  </nav>
+
+  {% include "empleados/expediente/_hero.html" %}
+
+  {% block expediente_content %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% block expediente_scripts %}{% endblock %}
+{% endblock %}

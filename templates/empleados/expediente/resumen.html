@@ -1,0 +1,74 @@
+{% extends "empleados/expediente_layout.html" %}
+{% block expediente_title %}Resumen{% endblock %}
+
+{% block expediente_content %}
+<div class="grid-2 mb-24">
+  <a href="{{ url_for('empleados.expediente_ficha', emp_id=empleado.id) }}" class="card" style="text-decoration:none;color:inherit;display:block;transition:transform .15s ease,box-shadow .15s ease;">
+    <div class="card-title">Ficha laboral</div>
+    <p class="text-sm text-muted" style="margin:0;">Ver datos de asignación actual, ingresos y enlace al candidato.</p>
+  </a>
+  <a href="{{ url_for('empleados.expediente_movimientos', emp_id=empleado.id) }}" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <div class="card-title">Movimientos</div>
+    <p class="text-sm text-muted" style="margin:0;">Registrar cambios de cargo/sede y revisar historial.</p>
+  </a>
+  <a href="{{ url_for('empleados.expediente_evaluaciones', emp_id=empleado.id) }}" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <div class="card-title">Evaluaciones</div>
+    <p class="text-sm text-muted" style="margin:0;">Nuevas evaluaciones de desempeño y seguimiento.</p>
+  </a>
+  {% if empleado.tareas_onboarding %}
+  <a href="{{ url_for('empleados.expediente_onboarding', emp_id=empleado.id) }}" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <div class="card-title">Onboarding</div>
+    <p class="text-sm text-muted" style="margin:0;">{{ empleado.tareas_onboarding|selectattr('hecha')|list|length }} / {{ empleado.tareas_onboarding|length }} tareas completadas.</p>
+  </a>
+  {% endif %}
+  <a href="{{ url_for('empleados.expediente_disciplina', emp_id=empleado.id) }}" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <div class="card-title">Disciplina y salida</div>
+    <p class="text-sm text-muted" style="margin:0;">Novedades disciplinarias y proceso de desvinculación.</p>
+  </a>
+  <a href="{{ url_for('empleados.expediente_documentos', emp_id=empleado.id) }}" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <div class="card-title">Documentos</div>
+    <p class="text-sm text-muted" style="margin:0;">Expediente digital y vista previa de archivos.</p>
+  </a>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Últimos movimientos</div>
+    <div class="timeline">
+      {% for m in empleado.movimientos|sort(attribute='fecha_movimiento', reverse=true) %}
+        {% if loop.index <= 3 %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">{{ m.tipo|replace('_',' ')|title }}</div>
+          <div class="timeline-meta">{{ m.fecha_movimiento.strftime('%d %b %Y') if m.fecha_movimiento else '—' }}</div>
+        </div>
+      </div>
+        {% endif %}
+      {% else %}
+      <p class="text-muted text-sm">Sin movimientos.</p>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('empleados.expediente_movimientos', emp_id=empleado.id) }}" class="btn btn-secondary btn-sm mt-12">Ver todos</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Últimas evaluaciones</div>
+    <div class="timeline">
+      {% for ev in empleado.evaluaciones_desempeno|sort(attribute='fecha_registro', reverse=true) %}
+        {% if loop.index <= 3 %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">{{ ev.periodo }} · {{ ev.puntaje_total or 0 }}%</div>
+          <div class="timeline-meta">{{ ev.plantilla.nombre if ev.plantilla else '—' }}</div>
+        </div>
+      </div>
+        {% endif %}
+      {% else %}
+      <p class="text-muted text-sm">Sin evaluaciones.</p>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('empleados.expediente_evaluaciones', emp_id=empleado.id) }}" class="btn btn-secondary btn-sm mt-12">Ver todas</a>
+  </div>
+</div>
+{% endblock %}

@@ -72,8 +72,9 @@
       <li class="flex justify-between items-center py-2 border-bottom">
         <span>{{ doc.nombre_original }} <span class="text-xs text-muted">({{ doc.tipo_documento }})</span></span>
         <a href="{{ url_for('candidatos.descargar_documento', doc_id=doc.id) }}" class="btn btn-secondary btn-xs">Descargar</a>
-        {% if doc.nombre_original and doc.nombre_original.lower().endswith('.pdf') %}
-        <a href="{{ url_for('candidatos.descargar_documento', doc_id=doc.id) }}" target="_blank" rel="noopener" class="btn btn-secondary btn-xs">Vista previa</a>
+        {% set ext_doc = (doc.nombre_archivo or '').rsplit('.', 1)[-1]|lower %}
+        {% if ext_doc in ['pdf','png','jpg','jpeg','gif','webp'] %}
+        <a href="{{ url_for('candidatos.visualizar_documento', doc_id=doc.id) }}" target="_blank" rel="noopener" class="btn btn-secondary btn-xs">Vista previa</a>
         {% endif %}
       </li>
       {% endfor %}

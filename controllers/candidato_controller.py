@@ -23,13 +23,14 @@ from werkzeug.utils import secure_filename
 from sqlalchemy import exists
 
 from models import (
-    Candidato,
-    HojaDeVida,
     Aplicacion,
+    Candidato,
     DocumentoAdjunto,
-    HistorialProceso,
-    Vacante,
+    Empleado,
     ESTADOS_APLICACION,
+    HistorialProceso,
+    HojaDeVida,
+    Vacante,
 )
 from extensions import db
 
@@ -385,23 +386,67 @@ def _guardar_documento(archivo, cedula, tipo, id_aplicacion):
     db.session.commit()
 
 
-# ─── Descargar documento ─────────────────────────────────────────────────────
+# ─── Descargar / vista previa documento ─────────────────────────────────────
+
+_PREVIEW_MIMETYPES = {
+    "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
+
+
+def _puede_acceder_documento(doc: DocumentoAdjunto) -> bool:
+    if not current_user.is_authenticated:
+        return False
+    if current_user.puede_ver_seleccion:
+        return True
+    emp = Empleado.query.filter_by(cedula=doc.cedula_candidato).first()
+    return bool(emp and emp.id_usuario == current_user.id)
+
 
 @candidatos_bp.route("/documentos/<int:doc_id>/descargar")
 @login_required
 def descargar_documento(doc_id):
-    if not current_user.puede_ver_seleccion:
-        abort(403)
-
     doc = db.session.get(DocumentoAdjunto, doc_id)
     if not doc:
         abort(404)
+    if not _puede_acceder_documento(doc):
+        abort(403)
     carpeta = os.path.dirname(doc.ruta_archivo)
     return send_from_directory(
-        carpeta, doc.nombre_archivo,
+        carpeta,
+        doc.nombre_archivo,
         as_attachment=True,
         download_name=doc.nombre_original,
     )
+
+
+@candidatos_bp.route("/documentos/<int:doc_id>/ver")
+@login_required
+def visualizar_documento(doc_id):
+    doc = db.session.get(DocumentoAdjunto, doc_id)
+    if not doc:
+        abort(404)
+    if not _puede_acceder_documento(doc):
+        abort(403)
+    ext = (doc.nombre_archivo or "").rsplit(".", 1)[-1].lower()
+    mimetype = _PREVIEW_MIMETYPES.get(ext)
+    if not mimetype:
+        flash("Este tipo de archivo no tiene vista previa en el navegador. Usa descargar.", "info")
+        return redirect(url_for("candidatos.descargar_documento", doc_id=doc.id))
+    carpeta = os.path.dirname(doc.ruta_archivo)
+    resp = send_from_directory(
+        carpeta,
+        doc.nombre_archivo,
+        as_attachment=False,
+        mimetype=mimetype,
+        download_name=doc.nombre_original,
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 # ─── Aplicar a vacante ────────────────────────────────────────────────────────

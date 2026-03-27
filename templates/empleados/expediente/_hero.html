@@ -1,0 +1,38 @@
+{% set actual = asignacion_actual if asignacion_actual is defined else (empleado.asignaciones|selectattr('es_actual')|list|first) %}
+<div class="emp-header mb-24">
+  <div class="emp-avatar">
+    {% if empleado.candidato %}{{ empleado.candidato.nombre_completo[0] }}{% else %}?{% endif %}
+  </div>
+  <div class="emp-meta">
+    <div class="emp-name">{{ empleado.candidato.nombre_completo if empleado.candidato else empleado.cedula }}</div>
+    <div class="emp-sub">
+      <span class="font-mono" style="font-size:12px;color:var(--text3);">{{ empleado.cedula }}</span>
+      &nbsp;·&nbsp;
+      <span class="badge {% if empleado.estado_laboral == 'activo' %}badge-green{% elif empleado.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">
+        {{ empleado.estado_laboral_legible }}
+      </span>
+      {% if empleado.fecha_ingreso %}
+      &nbsp;·&nbsp;
+      <span style="font-size:12px;color:var(--text3);">Desde {{ empleado.fecha_ingreso.strftime('%d %b %Y') }}</span>
+      {% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0;">
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ actual.cargo.nombre[:12] ~ '…' if actual and actual.cargo and actual.cargo.nombre|length > 12 else (actual.cargo.nombre if actual and actual.cargo else '—') }}</div>
+      <div class="stat-chip-l">Cargo</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ actual.sede.nombre[:10] ~ '…' if actual and actual.sede and actual.sede.nombre|length > 10 else (actual.sede.nombre if actual and actual.sede else '—') }}</div>
+      <div class="stat-chip-l">Sede</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ empleado.evaluaciones_desempeno|length }}</div>
+      <div class="stat-chip-l">Evaluaciones</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ empleado.movimientos|length }}</div>
+      <div class="stat-chip-l">Movimientos</div>
+    </div>
+  </div>
+</div>

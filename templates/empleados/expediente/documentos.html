@@ -1,18 +1,16 @@
-{% extends "base.html" %}
-{% block title %}Expediente — {{ candidato.nombre_completo }}{% endblock %}
-{% block page_title %}Expediente digital{% endblock %}
-{% block page_sub %}{{ candidato.nombre_completo }}{% endblock %}
-{% block topbar_actions %}
-<a href="{{ url_for('candidatos.detalle', cedula=candidato.cedula) }}" class="btn btn-secondary">Volver al perfil</a>
-{% endblock %}
-{% block content %}
+{% extends "empleados/expediente_layout.html" %}
+{% block expediente_title %}Documentos{% endblock %}
+
+{% block expediente_content %}
 <div class="card mb-24">
-  <div class="card-title">Documentos</div>
+  <div class="card-title">Archivos del expediente</div>
+  <p class="text-sm text-muted mb-16">Documentos asociados al candidato (misma cédula). Use vista previa para PDF e imágenes sin descargar.</p>
+  {% if empleado.candidato and empleado.candidato.documentos %}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Fecha</th><th>Tipo</th><th>Archivo</th><th>Aplicación</th><th></th></tr></thead>
       <tbody>
-        {% for d in documentos %}
+        {% for d in empleado.candidato.documentos|sort(attribute='fecha_subida', reverse=true) %}
         <tr>
           <td class="font-mono text-sm">{{ d.fecha_subida.strftime('%d/%m/%Y %H:%M') if d.fecha_subida else '—' }}</td>
           <td>{{ d.tipo_documento or '—' }}</td>
@@ -28,12 +26,13 @@
             </div>
           </td>
         </tr>
-        {% else %}
-        <tr><td colspan="5" class="text-center text-muted">Sin documentos</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% else %}
+  <p class="text-muted text-sm">Sin documentos.</p>
+  {% endif %}
 </div>
 
 <div id="tf-doc-preview-modal" class="tf-modal" aria-hidden="true" hidden>
@@ -48,28 +47,9 @@
     </div>
   </div>
 </div>
-
-<div class="card">
-  <div class="card-title">Aplicaciones y estado</div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Vacante</th><th>Estado</th><th>Score</th><th></th></tr></thead>
-      <tbody>
-        {% for ap in candidato.aplicaciones %}
-        <tr>
-          <td>{{ ap.vacante.titulo }}</td>
-          <td><span class="badge badge-blue">{{ ap.estado_legible }}</span></td>
-          <td class="font-mono text-sm">{{ ap.score if ap.score is not none else '—' }}</td>
-          <td><a href="{{ url_for('proceso.detalle', app_id=ap.id) }}" class="btn btn-secondary btn-sm">Proceso</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
 {% endblock %}
 
-{% block scripts %}
+{% block expediente_scripts %}
 <script>
 (function(){
   const modal = document.getElementById('tf-doc-preview-modal');
@@ -77,17 +57,17 @@
   const titleEl = document.getElementById('tf-doc-preview-title');
   if (!modal || !frame) return;
   function openModal(url, name) {
-    frame.src = url;
-    if (titleEl) titleEl.textContent = name || 'Vista previa';
-    modal.hidden = false;
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
+       frame.src = url;
+       if (titleEl) titleEl.textContent = name || 'Vista previa';
+       modal.hidden = false;
+       modal.setAttribute('aria-hidden', 'false');
+       document.body.style.overflow = 'hidden';
   }
   function closeModal() {
-    frame.src = '';
-    modal.hidden = true;
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
+       frame.src = '';
+       modal.hidden = true;
+       modal.setAttribute('aria-hidden', 'true');
+       document.body.style.overflow = '';
   }
   document.querySelectorAll('.tf-doc-preview-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {

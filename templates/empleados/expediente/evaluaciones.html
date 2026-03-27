@@ -1,0 +1,118 @@
+{% extends "empleados/expediente_layout.html" %}
+{% block expediente_title %}Evaluaciones{% endblock %}
+
+{% block expediente_content %}
+<div class="grid-2 mb-24">
+  {% if current_user.es_rrhh %}
+  <div class="card" id="form-evaluacion">
+    <div class="card-title">Nueva evaluación de desempeño</div>
+    {% if plantillas %}
+    <form method="post" action="{{ url_for('empleados.registrar_evaluacion', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">Plantilla</label>
+        <select id="selPlantilla" name="id_plantilla" class="form-select" required>
+          {% for p in plantillas %}<option value="{{ p.id }}">{{ p.nombre }} (v{{ p.version }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Periodo</label>
+        <input name="periodo" class="form-input" placeholder="2026-Q1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jefe evaluador</label>
+        <select name="id_jefe_evaluador" class="form-select">
+          {% for u in jefes %}<option value="{{ u.id }}">{{ u.nombre_completo }}</option>{% endfor %}
+        </select>
+      </div>
+      <div id="criteriosBox" class="form-full"></div>
+      <div class="form-group form-full">
+        <label class="form-label">Comentario del jefe</label>
+        <textarea name="comentario_jefe" class="form-textarea" rows="2" placeholder="Observaciones generales..."></textarea>
+      </div>
+      <div class="form-full"><button type="submit" class="btn btn-primary" style="width:100%;">Registrar evaluación</button></div>
+    </form>
+    {% else %}
+    <p class="text-muted text-sm">No hay plantillas activas. Configúrelas en catálogos HR.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-title">Evaluaciones</div>
+    <p class="text-muted text-sm">Solo RRHH registra evaluaciones. Puede aceptar o rechazar las pendientes asignadas a usted.</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-title">Historial de evaluaciones</div>
+    <div class="timeline">
+      {% for ev in empleado.evaluaciones_desempeno|sort(attribute='fecha_registro', reverse=true) %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            {{ ev.periodo }}
+            <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;
+              {% if (ev.puntaje_total or 0)|float >= 80 %}background:var(--green-bg);color:var(--green);
+              {% elif (ev.puntaje_total or 0)|float >= 50 %}background:var(--amber-bg);color:var(--amber);
+              {% else %}background:var(--red-bg);color:var(--red);{% endif %}">
+              {{ ev.puntaje_total or '0' }}%
+            </span>
+          </div>
+          <div class="timeline-meta">
+            {{ ev.plantilla.nombre if ev.plantilla else 'Sin plantilla' }} ·
+            <span class="badge {% if ev.estado_aceptacion == 'aceptada' %}badge-green{% elif ev.estado_aceptacion == 'rechazada' %}badge-red{% else %}badge-amber{% endif %}" style="font-size:10px;">{{ ev.estado_aceptacion }}</span>
+          </div>
+          {% if ev.estado_aceptacion == 'pendiente_empleado' and (current_user.es_rrhh or (empleado.id_usuario and empleado.id_usuario == current_user.id)) %}
+          <form method="post" action="{{ url_for('empleados.aceptar_evaluacion', ev_id=ev.id) }}" class="flex gap-8 mt-12" style="flex-wrap:wrap;">
+            <input type="hidden" name="accion" value="aceptar">
+            <input type="text" name="comentario_empleado" class="form-input" placeholder="Comentario (opcional)" style="flex:1;min-width:160px;height:32px;font-size:12px;">
+            <button type="submit" class="btn btn-success btn-sm">Aceptar</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="text-muted text-sm">Sin evaluaciones registradas.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block expediente_scripts %}
+{% if current_user.es_rrhh and plantillas %}
+<script>
+(function(){
+  const data = {
+  {% for p in plantillas %}
+    "{{ p.id }}": {{ p.criterios_json|safe }},
+  {% endfor %}
+  };
+  const sel = document.getElementById('selPlantilla');
+  const box = document.getElementById('criteriosBox');
+  if (!sel || !box) return;
+  function render() {
+    const criterios = data[sel.value] || [];
+    if (!criterios.length) {
+      box.innerHTML = '<p class="text-muted text-sm" style="padding:8px 0;">Sin criterios en la plantilla seleccionada.</p>';
+      return;
+    }
+    let html = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:4px;">'
+         + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:12px;">Criterios de evaluación</div>'
+         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    criterios.forEach(c => {
+      const id = String(c.id || '').trim();
+      if (!id) return;
+      const maxv = Number(c.max || 5);
+      html += '<div class="form-group"><label class="form-label">' + (c.texto || id) + ' <span style="color:var(--text3);font-weight:400;">(max ' + maxv + ')</span></label>'
+        + '<input class="form-input" type="number" min="0" max="' + maxv + '" step="0.1" name="criterio_' + id + '" required placeholder="0"></div>';
+    });
+    html += '</div></div>';
+    box.innerHTML = html;
+  }
+  sel.addEventListener('change', render);
+  render();
+})();
+</script>
+{% endif %}
+{% endblock %}

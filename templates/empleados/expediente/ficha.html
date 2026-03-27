@@ -1,0 +1,47 @@
+{% extends "empleados/expediente_layout.html" %}
+{% block expediente_title %}Ficha laboral{% endblock %}
+
+{% block expediente_content %}
+{% set actual = asignacion_actual %}
+<div class="card mb-24">
+  <div class="card-title">Datos laborales</div>
+  <dl class="emp-dl-grid">
+    <div class="emp-dl-row"><dt>Cédula</dt><dd class="font-mono">{{ empleado.cedula }}</dd></div>
+    <div class="emp-dl-row"><dt>Cargo actual</dt><dd>{{ actual.cargo.nombre if actual and actual.cargo else '—' }}</dd></div>
+    <div class="emp-dl-row"><dt>Sede</dt><dd>{{ actual.sede.nombre if actual and actual.sede else '—' }}</dd></div>
+    <div class="emp-dl-row"><dt>Jefe directo</dt><dd>{{ actual.jefe.nombre_completo if actual and actual.jefe else '—' }}</dd></div>
+    <div class="emp-dl-row"><dt>Fecha ingreso</dt><dd>{{ empleado.fecha_ingreso.strftime('%d %b %Y') if empleado.fecha_ingreso else '—' }}</dd></div>
+    {% if empleado.fecha_salida %}
+    <div class="emp-dl-row emp-dl-row--alert"><dt>Fecha salida</dt><dd>{{ empleado.fecha_salida.strftime('%d %b %Y') }}</dd></div>
+    {% endif %}
+  </dl>
+</div>
+
+<div class="card mb-24">
+  <div class="card-title">Persona (candidato)</div>
+  {% if empleado.candidato %}
+  <p class="text-sm mb-12">{{ empleado.candidato.nombre_completo }} · {{ empleado.candidato.correo or '—' }}</p>
+  <div class="flex gap-8 flex-wrap">
+    <a href="{{ url_for('candidatos.detalle', cedula=empleado.cedula) }}" class="btn btn-secondary btn-sm">Ver perfil candidato</a>
+    <a href="{{ url_for('candidatos.expediente', cedula=empleado.cedula) }}" class="btn btn-secondary btn-sm">Expediente digital</a>
+    <a href="{{ url_for('empleados.expediente_documentos', emp_id=empleado.id) }}" class="btn btn-primary btn-sm">Documentos y HDV</a>
+  </div>
+  {% else %}
+  <p class="text-muted text-sm">Sin candidato vinculado.</p>
+  {% endif %}
+</div>
+
+{% set hdv_list = empleado.candidato.documentos | selectattr('tipo_documento','equalto','hoja_de_vida') | list | sort(attribute='fecha_subida', reverse=true) if empleado.candidato else [] %}
+{% if hdv_list %}
+<div class="card">
+  <div class="card-title">Hoja de vida</div>
+  <p class="text-sm text-muted mb-12">Último archivo registrado como hoja de vida.</p>
+  {% set d = hdv_list[0] %}
+  <div class="flex gap-8 flex-wrap items-center">
+    <span class="text-sm">{{ d.nombre_original }}</span>
+    <a href="{{ url_for('candidatos.visualizar_documento', doc_id=d.id) }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Vista previa</a>
+    <a href="{{ url_for('candidatos.descargar_documento', doc_id=d.id) }}" class="btn btn-secondary btn-sm">Descargar</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

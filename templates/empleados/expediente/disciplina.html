@@ -1,0 +1,84 @@
+{% extends "empleados/expediente_layout.html" %}
+{% block expediente_title %}Disciplina y salida{% endblock %}
+
+{% block expediente_content %}
+<div class="card mb-24">
+  <div class="card-title">Novedades registradas</div>
+  {% if empleado.novedades_disciplinarias %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Severidad</th><th>Estado</th><th>Descripción</th></tr></thead>
+      <tbody>
+        {% for n in empleado.novedades_disciplinarias|sort(attribute='fecha_registro', reverse=true) %}
+        <tr>
+          <td class="text-sm font-mono">{{ n.fecha_falta.strftime('%d/%m/%Y') if n.fecha_falta else '—' }}</td>
+          <td>{{ n.tipo }}</td>
+          <td>{{ n.severidad or '—' }}</td>
+          <td><span class="badge badge-gray">{{ n.estado }}</span></td>
+          <td class="text-sm">{{ (n.descripcion or '')[:120] }}{% if n.descripcion and n.descripcion|length > 120 %}…{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted text-sm">Sin novedades disciplinarias.</p>
+  {% endif %}
+</div>
+
+<div class="grid-2">
+  {% if current_user.es_rrhh %}
+  <div class="card" id="form-disciplina">
+    <div class="card-title">Registrar novedad disciplinaria</div>
+    <form method="post" action="{{ url_for('empleados.registrar_disciplina', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group"><label class="form-label">Tipo falta</label><input name="tipo" class="form-input" required placeholder="Ej: tardanza"></div>
+      <div class="form-group"><label class="form-label">Severidad</label>
+        <select name="severidad" class="form-select">
+          <option value="">Seleccionar…</option>
+          <option value="leve">Leve</option>
+          <option value="moderada">Moderada</option>
+          <option value="grave">Grave</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Fecha falta</label><input type="date" name="fecha_falta" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Estado</label>
+        <select name="estado" class="form-select">
+          <option value="registrada">Registrada</option>
+          <option value="en_proceso">En proceso</option>
+          <option value="resuelta">Resuelta</option>
+        </select>
+      </div>
+      <div class="form-group form-full"><label class="form-label">Descripción</label><textarea name="descripcion" class="form-textarea" rows="2" required></textarea></div>
+      <div class="form-group form-full"><label class="form-label">Sanción aplicada</label><textarea name="sancion" class="form-textarea" rows="2"></textarea></div>
+      <div class="form-full"><button type="submit" class="btn btn-amber" style="width:100%;">Registrar novedad</button></div>
+    </form>
+  </div>
+  {% else %}
+  <div class="card"><div class="card-title">Disciplina</div><p class="text-muted text-sm">Solo RRHH registra novedades.</p></div>
+  {% endif %}
+
+  {% if current_user.es_rrhh %}
+  <div class="card" id="form-desvincular">
+    <div class="card-title" style="color:var(--red);">Desvinculación</div>
+    <form method="post" action="{{ url_for('empleados.desvincular', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo de salida</label>
+        <select name="tipo" class="form-select" required>
+          <option value="retiro_voluntario">Retiro voluntario</option>
+          <option value="despido">Despido</option>
+          <option value="fin_contrato">Fin de contrato</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Fecha efectiva</label><input type="date" name="fecha_efectiva" class="form-input" required></div>
+      <div class="form-group form-full"><label class="form-label">Causa / descripción</label><textarea name="causa" class="form-textarea" rows="2"></textarea></div>
+      <div class="form-group form-full"><label class="form-label">Documento de referencia</label><input name="documento_ref" class="form-input" placeholder="acta_123.pdf"></div>
+      <div class="form-full">
+        <button type="submit" class="btn btn-danger" style="width:100%;" onclick="return confirm('¿Confirmar desvinculación del empleado?');">Registrar salida</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="card"><p class="text-muted text-sm">La desvinculación la gestiona RRHH.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

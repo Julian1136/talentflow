@@ -1,0 +1,77 @@
+{% extends "empleados/expediente_layout.html" %}
+{% block expediente_title %}Movimientos{% endblock %}
+
+{% block expediente_content %}
+<div class="grid-2 mb-24">
+  {% if current_user.es_rrhh %}
+  <div class="card" id="form-movimiento">
+    <div class="card-title">Registrar movimiento</div>
+    <form method="post" action="{{ url_for('empleados.registrar_movimiento', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select name="tipo" class="form-select" required>
+          {% for codigo, nombre in tipos_movimiento %}
+          <option value="{{ codigo }}">{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha efectiva</label>
+        <input type="date" name="fecha_movimiento" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nuevo cargo</label>
+        <select name="id_cargo" class="form-select" required>
+          {% for c in cargos %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nueva sede</label>
+        <select name="id_sede" class="form-select" required>
+          {% for s in sedes %}<option value="{{ s.id }}">{{ s.nombre }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">Jefe asignado</label>
+        <select name="id_jefe" class="form-select">
+          <option value="">— Sin jefe asignado —</option>
+          {% for u in jefes %}<option value="{{ u.id }}">{{ u.nombre_completo }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">Motivo / observación</label>
+        <textarea name="motivo" class="form-textarea" rows="2" placeholder="Descripción del movimiento..."></textarea>
+      </div>
+      <div class="form-full">
+        <button type="submit" class="btn btn-primary" style="width:100%;">Guardar movimiento</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-title">Movimientos</div>
+    <p class="text-muted text-sm">Solo RRHH puede registrar movimientos laborales.</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-title">Historial</div>
+    <div class="timeline">
+    {% for m in empleado.movimientos|sort(attribute='fecha_movimiento', reverse=true) %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">{{ m.tipo|replace('_',' ')|title }}</div>
+          <div class="timeline-meta">
+            <span>{{ m.fecha_movimiento.strftime('%d %b %Y') if m.fecha_movimiento else '—' }}</span>
+            {% if m.motivo %}<span> · {{ m.motivo }}</span>{% endif %}
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted text-sm">Sin movimientos registrados.</p>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

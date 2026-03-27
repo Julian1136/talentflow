@@ -435,7 +435,13 @@ body {
 .theme-chip:hover { background: var(--accent); border-color: var(--accent); color: white; }
 
 /* ── Content ───────────────────────────────────────────────────── */
-.content { padding: 24px 28px; max-width: 1400px; width: 100%; }
+/* Ancho fluido: usa todo el espacio a la derecha del sidebar (sin capar a ~1400px). */
+.content {
+  padding: 24px 28px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
 
 /* ── Alerts ────────────────────────────────────────────────────── */
 .alerts { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -728,7 +734,7 @@ tbody tr:hover { background: var(--accent-light); }
 }
 
 /* ── Catalog Layout Overrides ──────────────────────────────────── */
-.hr-cat-wrap { max-width: 1340px; margin: 0 auto; }
+.hr-cat-wrap { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
 
 .hr-cat-subnav {
   display: flex;
@@ -1600,6 +1606,85 @@ html[data-theme="dark"] {
 
   .global-search-form input { width: 130px; }
 }
+
+/* ── Expediente empleado: ficha ───────────────────────────────── */
+.emp-expediente-wrap { margin-bottom: 8px; }
+
+.emp-dl-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.emp-dl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.emp-dl-row--alert {
+  background: var(--red-bg);
+  border-color: #fecaca;
+}
+.emp-dl-row dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+  margin: 0;
+}
+.emp-dl-row dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+.emp-dl-row--alert dt { color: #991b1b; }
+.emp-dl-row--alert dd { color: #991b1b; }
+
+/* Modal vista previa documento */
+.tf-modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.tf-modal[hidden] { display: none !important; }
+.tf-modal__backdrop { position: absolute; inset: 0; background: rgba(13, 24, 41, 0.55); }
+.tf-modal__panel {
+  position: relative;
+  width: min(960px, 100%);
+  max-height: min(90vh, 880px);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideIn 0.22s var(--ease-out);
+}
+.tf-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.tf-modal__title { font-family: "Outfit", sans-serif; font-weight: 700; font-size: 15px; }
+.tf-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text2);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+.tf-modal__close:hover { background: var(--surface3); color: var(--text); }
+.tf-modal__body { flex: 1; min-height: 0; padding: 0; }
+.tf-modal__iframe { width: 100%; height: min(72vh, 720px); border: none; display: block; background: var(--surface2); }
 
 /* ── Scrollbar ─────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
