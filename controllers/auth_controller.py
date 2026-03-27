@@ -5,6 +5,8 @@ Maneja login, logout y registro de usuarios del sistema.
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
+from sqlalchemy.exc import IntegrityError
+
 from models import Usuario, Rol
 from extensions import db
 
@@ -57,20 +59,39 @@ def gestionar_usuarios():
                 flash("Rol no válido.", "danger")
                 return redirect(url_for("auth.gestionar_usuarios"))
 
-            if Usuario.query.filter_by(correo=request.form.get("correo")).first():
+            cedula = (request.form.get("cedula") or "").strip()
+            correo = (request.form.get("correo") or "").strip().lower()
+
+            if not cedula or not correo:
+                flash("Cédula y correo son obligatorios.", "warning")
+                return redirect(url_for("auth.gestionar_usuarios"))
+
+            if Usuario.query.filter_by(cedula=cedula).first():
+                flash("Ya existe un usuario con esa cédula.", "warning")
+                return redirect(url_for("auth.gestionar_usuarios"))
+
+            if Usuario.query.filter_by(correo=correo).first():
                 flash("Ya existe un usuario con ese correo.", "warning")
                 return redirect(url_for("auth.gestionar_usuarios"))
 
             nuevo = Usuario(
-                cedula=request.form.get("cedula"),
-                nombres=request.form.get("nombres"),
-                apellidos=request.form.get("apellidos"),
-                correo=request.form.get("correo").strip().lower(),
+                cedula=cedula,
+                nombres=(request.form.get("nombres") or "").strip(),
+                apellidos=(request.form.get("apellidos") or "").strip(),
+                correo=correo,
                 id_rol=rol.id,
             )
             nuevo.set_password(request.form.get("password"))
-            db.session.add(nuevo)
-            db.session.commit()
+            try:
+                db.session.add(nuevo)
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                flash(
+                    "No se pudo crear el usuario: la cédula o el correo ya están registrados.",
+                    "danger",
+                )
+                return redirect(url_for("auth.gestionar_usuarios"))
             flash(f"Usuario {nuevo.nombre_completo} creado.", "success")
 
         elif accion == "desactivar":

@@ -12,9 +12,37 @@
     <a href="{{ url_for('reportes.exportar_candidatos') }}" class="btn btn-primary">Exportar a CSV</a>
   </div>
   <div class="card">
-    <div class="card-title">Reporte de vacantes</div>
-    <p class="mb-16">Próximamente: reportes personalizados de vacantes y procesos.</p>
-    <button class="btn btn-secondary" disabled>En desarrollo</button>
+    <div class="card-title">Exportar empleados (HR)</div>
+    <p class="mb-16">Descarga historial laboral y estado actual de empleados.</p>
+    <a href="{{ url_for('reportes.exportar_empleados') }}" class="btn btn-primary">Exportar empleados</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Desempeño por cargo</div>
+    <p class="mb-16">Reporte detallado de evaluaciones de desempeño para análisis por cargo/sede.</p>
+    <a href="{{ url_for('reportes.exportar_evaluaciones_desempeno') }}" class="btn btn-primary">Exportar desempeño</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Métricas HR en vivo</div>
+    <p class="mb-16">Incluye estado laboral, disciplina y desvinculaciones en dashboard API.</p>
+    <button class="btn btn-secondary" id="btnHrMetrics">Consultar métricas</button>
+    <pre id="hrMetricsOut" class="text-sm mt-12" style="white-space:pre-wrap"></pre>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('btnHrMetrics')?.addEventListener('click', async () => {
+  const out = document.getElementById('hrMetricsOut');
+  if (!out) return;
+  out.textContent = 'Consultando...';
+  try {
+    const r = await fetch("{{ url_for('dashboard.api_hr_resumen') }}");
+    const d = await r.json();
+    out.textContent = JSON.stringify(d, null, 2);
+  } catch (e) {
+    out.textContent = 'No se pudo consultar.';
+  }
+});
+</script>
 {% endblock %}

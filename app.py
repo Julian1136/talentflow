@@ -92,6 +92,8 @@ def create_app():
     from controllers.calendario_controller import calendario_bp
     from controllers.firma_controller import firma_bp
     from controllers.publico_controller import publico_bp
+    from controllers.empleado_controller import empleados_bp
+    from controllers.config_controller import config_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(candidatos_bp)
@@ -103,13 +105,26 @@ def create_app():
     app.register_blueprint(calendario_bp)
     app.register_blueprint(firma_bp)
     app.register_blueprint(publico_bp)
+    app.register_blueprint(empleados_bp)
+    app.register_blueprint(config_bp)
 
     # ── User loader para Flask-Login ───────────────────────────────
-    from models import Usuario
+    from models import ConfiguracionTema, Usuario
 
     @login_manager.user_loader  
     def load_user(user_id):
         return db.session.get(Usuario, int(user_id))
+
+    @app.context_processor
+    def inject_theme():
+        try:
+            cfg = db.session.get(ConfiguracionTema, 1)
+            if not cfg:
+                return {}
+            return {"theme_cfg": cfg}
+        except Exception:
+            # Permite arrancar aunque aún no se aplique 06_hr_lifecycle.sql
+            return {}
 
     log_config_warnings(app.logger)
 

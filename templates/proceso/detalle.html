@@ -338,7 +338,7 @@
             <td class="text-sm">{{ e.lugar or '—' }}</td>
             <td class="text-sm">{{ e.entrevistador.nombre_completo if e.entrevistador else '—' }}</td>
             <td>
-              <span class="badge badge-{{ 'amber' if e.resultado == 'pendiente' else 'green' if e.resultado == 'apto' else 'red' if e.resultado == 'no_apto' else 'gray' }}">
+              <span class="badge badge-{{ 'amber' if e.resultado in ['pendiente','reprogramada'] else 'green' if e.resultado == 'apto' else 'red' if e.resultado in ['no_apto','cancelada'] else 'gray' }}">
                 {{ e.resultado or 'pendiente' }}
               </span>
             </td>
@@ -349,6 +349,21 @@
               {% if e.resultado == 'pendiente' and current_user.es_reclutador %}
               <button onclick="abrirModalResultado({{ e.id }})"
                       class="btn btn-secondary btn-xs">Resultado</button>
+              {% endif %}
+              {% if current_user.es_reclutador %}
+              <form method="post" action="{{ url_for('proceso.reenviar_entrevista', ent_id=e.id) }}" style="display:inline-block;margin-left:4px;">
+                <button type="submit" class="btn btn-secondary btn-xs">Reenviar</button>
+              </form>
+              {% if e.resultado != 'cancelada' %}
+              <button type="button" class="btn btn-secondary btn-xs" style="margin-left:4px;"
+                onclick="abrirModalReprogramar({{ e.id }}, '{{ (e.tipo or '')|e }}', '{{ e.fecha_programada.strftime('%Y-%m-%dT%H:%M') if e.fecha_programada else '' }}', '{{ (e.lugar or '')|e }}', '{{ e.id_entrevistador or '' }}')">Reprogramar</button>
+              {% endif %}
+              {% if e.resultado != 'cancelada' %}
+              <form method="post" action="{{ url_for('proceso.cancelar_entrevista', ent_id=e.id) }}" style="display:inline-block;margin-left:4px;" onsubmit="return confirmarCancelacionEntrevista(this);">
+                <input type="hidden" name="motivo_cancelacion" value="">
+                <button type="submit" class="btn btn-danger btn-xs">Cancelar</button>
+              </form>
+              {% endif %}
               {% endif %}
             </td>
           </tr>
@@ -622,6 +637,56 @@
 
 
 {# ══════════════════════════════════════════════
+   MODAL 3.5 — Reprogramar entrevista
+══════════════════════════════════════════════ #}
+<div class="modal-overlay" id="modal-reprogramar-entrevista">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModal('modal-reprogramar-entrevista')">×</button>
+    <div class="modal-title">Reprogramar entrevista</div>
+    <form id="form-reprogramar-entrevista" method="POST">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select name="tipo" id="rep-tipo" class="form-select" required>
+            <option value="reclutador">Recursos Humanos</option>
+            <option value="jefe_area">Jefe de Área</option>
+            <option value="gerencia">Gerencia</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Entrevistador</label>
+          <select name="id_entrevistador" id="rep-entrevistador" class="form-select">
+            <option value="{{ current_user.id }}">{{ current_user.nombre_completo }} (yo)</option>
+            {% for u in usuarios %}
+            {% if u.id != current_user.id %}
+            <option value="{{ u.id }}">{{ u.nombre_completo }} — {{ u.rol.nombre }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nueva fecha y hora</label>
+          <input type="datetime-local" name="fecha_programada" id="rep-fecha" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Lugar / Enlace</label>
+          <input type="text" name="lugar" id="rep-lugar" class="form-input">
+        </div>
+        <div class="form-full form-group">
+          <label class="form-label">Motivo de reprogramación (opcional)</label>
+          <textarea name="motivo_reprogramacion" class="form-textarea" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-8">
+        <button type="submit" class="btn btn-primary">Guardar reprogramación</button>
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modal-reprogramar-entrevista')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════
    MODAL 4 — Evaluación psicológica
 ══════════════════════════════════════════════ #}
 <div class="modal-overlay" id="modal-psicologica">
@@ -854,6 +919,25 @@ function abrirModalResultado(entId) {
   const tpl = "{{ url_for('proceso.resultado_entrevista', ent_id=0) }}";
   form.action = tpl.replace(/\/entrevista\/0\//, "/entrevista/" + entId + "/");
   abrirModal('modal-resultado-entrevista');
+}
+
+function abrirModalReprogramar(entId, tipo, fecha, lugar, entrevistadorId) {
+  const form = document.getElementById('form-reprogramar-entrevista');
+  const tpl = "{{ url_for('proceso.reprogramar_entrevista', ent_id=0) }}";
+  form.action = tpl.replace(/\/entrevista\/0\//, "/entrevista/" + entId + "/");
+  document.getElementById('rep-tipo').value = tipo || 'reclutador';
+  document.getElementById('rep-fecha').value = fecha || '';
+  document.getElementById('rep-lugar').value = lugar || '';
+  if (entrevistadorId) document.getElementById('rep-entrevistador').value = entrevistadorId;
+  abrirModal('modal-reprogramar-entrevista');
+}
+
+function confirmarCancelacionEntrevista(formEl) {
+  const motivo = window.prompt('Motivo de cancelación (opcional):', '');
+  if (motivo === null) return false;
+  const hidden = formEl.querySelector('input[name="motivo_cancelacion"]');
+  if (hidden) hidden.value = motivo.trim();
+  return window.confirm('¿Confirmas cancelar esta entrevista?');
 }
 
 /* ══════════════════════════════════════════════

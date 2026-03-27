@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Empleado{% endblock %}
+{% block page_title %}Expediente laboral{% endblock %}
+{% block page_sub %}{{ empleado.candidato.nombre_completo if empleado.candidato else empleado.cedula }}{% endblock %}
+
+{% block content %}
+{% set actual = (empleado.asignaciones|selectattr('es_actual')|list|first) %}
+<div class="grid-2 mb-24">
+  <div class="card">
+    <div class="card-title">Ficha laboral</div>
+    <div class="text-sm">
+      <p><strong>Cédula:</strong> <span class="font-mono">{{ empleado.cedula }}</span></p>
+      <p><strong>Estado:</strong> <span class="badge {% if empleado.estado_laboral == 'activo' %}badge-green{% elif empleado.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">{{ empleado.estado_laboral_legible }}</span></p>
+      <p><strong>Cargo actual:</strong> {{ actual.cargo.nombre if actual and actual.cargo else '—' }}</p>
+      <p><strong>Sede actual:</strong> {{ actual.sede.nombre if actual and actual.sede else '—' }}</p>
+      <p><strong>Jefe actual:</strong> {{ actual.jefe.nombre_completo if actual and actual.jefe else '—' }}</p>
+      <p><strong>Ingreso:</strong> {{ empleado.fecha_ingreso.strftime('%Y-%m-%d') if empleado.fecha_ingreso else '—' }}</p>
+      {% if empleado.fecha_salida %}<p><strong>Salida:</strong> {{ empleado.fecha_salida.strftime('%Y-%m-%d') }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Registrar movimiento (ascenso/traslado)</div>
+    <form method="post" action="{{ url_for('empleados.registrar_movimiento', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select name="tipo" class="form-select" required>
+          {% for codigo, nombre in tipos_movimiento %}
+          <option value="{{ codigo }}">{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha</label>
+        <input type="date" name="fecha_movimiento" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cargo</label>
+        <select name="id_cargo" class="form-select" required>
+          {% for c in cargos %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sede</label>
+        <select name="id_sede" class="form-select" required>
+          {% for s in sedes %}<option value="{{ s.id }}">{{ s.nombre }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jefe</label>
+        <select name="id_jefe" class="form-select">
+          <option value="">—</option>
+          {% for u in jefes %}<option value="{{ u.id }}">{{ u.nombre_completo }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">Motivo</label>
+        <textarea name="motivo" class="form-textarea"></textarea>
+      </div>
+      <div class="form-full"><button class="btn btn-primary">Guardar movimiento</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="grid-2 mb-24">
+  <div class="card">
+    <div class="card-title">Evaluación de desempeño</div>
+    <form method="post" action="{{ url_for('empleados.registrar_evaluacion', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">Plantilla</label>
+        <select id="selPlantilla" name="id_plantilla" class="form-select" required>
+          {% for p in plantillas %}<option value="{{ p.id }}">{{ p.nombre }} (v{{ p.version }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Periodo</label>
+        <input name="periodo" class="form-input" placeholder="2026-Q1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jefe evaluador</label>
+        <select name="id_jefe_evaluador" class="form-select">
+          {% for u in jefes %}<option value="{{ u.id }}">{{ u.nombre_completo }}</option>{% endfor %}
+        </select>
+      </div>
+      <div id="criteriosBox" class="form-full"></div>
+      <div class="form-group form-full">
+        <label class="form-label">Comentario del jefe</label>
+        <textarea name="comentario_jefe" class="form-textarea"></textarea>
+      </div>
+      <div class="form-full"><button class="btn btn-primary">Registrar evaluación</button></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Disciplina y salida</div>
+    <form method="post" action="{{ url_for('empleados.registrar_disciplina', emp_id=empleado.id) }}" class="form-grid mb-24">
+      <div class="form-group"><label class="form-label">Tipo falta</label><input name="tipo" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Severidad</label><input name="severidad" class="form-input" placeholder="leve, grave"></div>
+      <div class="form-group"><label class="form-label">Fecha falta</label><input type="date" name="fecha_falta" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Estado</label><input name="estado" class="form-input" value="registrada"></div>
+      <div class="form-group form-full"><label class="form-label">Descripción</label><textarea name="descripcion" class="form-textarea" required></textarea></div>
+      <div class="form-group form-full"><label class="form-label">Sanción</label><textarea name="sancion" class="form-textarea"></textarea></div>
+      <div class="form-full"><button class="btn btn-amber btn-secondary">Registrar novedad</button></div>
+    </form>
+
+    <form method="post" action="{{ url_for('empleados.desvincular', emp_id=empleado.id) }}" class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo de salida</label>
+        <select name="tipo" class="form-select" required>
+          <option value="retiro_voluntario">Retiro voluntario</option>
+          <option value="despido">Despido</option>
+          <option value="fin_contrato">Fin de contrato</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Fecha efectiva</label><input type="date" name="fecha_efectiva" class="form-input" required></div>
+      <div class="form-group form-full"><label class="form-label">Causa</label><textarea name="causa" class="form-textarea"></textarea></div>
+      <div class="form-group form-full"><label class="form-label">Documento</label><input name="documento_ref" class="form-input" placeholder="acta_123.pdf"></div>
+      <div class="form-full"><button class="btn btn-danger">Registrar salida</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Movimientos laborales</div>
+    <div class="timeline">
+    {% for m in empleado.movimientos|sort(attribute='fecha_movimiento', reverse=true) %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">{{ m.tipo|replace('_',' ')|title }}</div>
+          <div class="timeline-meta">{{ m.fecha_movimiento.strftime('%Y-%m-%d') if m.fecha_movimiento else '—' }} · {{ m.motivo or 'Sin observación' }}</div>
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted text-sm">Sin movimientos registrados.</p>
+    {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Evaluaciones de desempeño</div>
+    <div class="timeline">
+      {% for ev in empleado.evaluaciones_desempeno|sort(attribute='fecha_registro', reverse=true) %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title">{{ ev.periodo }} · {{ ev.puntaje_total or '0' }}%</div>
+          <div class="timeline-meta">{{ ev.plantilla.nombre if ev.plantilla else 'Plantilla' }} · estado {{ ev.estado_aceptacion }}</div>
+          {% if ev.estado_aceptacion == 'pendiente_empleado' and (current_user.es_rrhh or (empleado.id_usuario and empleado.id_usuario == current_user.id)) %}
+          <form method="post" action="{{ url_for('empleados.aceptar_evaluacion', ev_id=ev.id) }}" class="flex gap-8 mt-12">
+            <input type="hidden" name="accion" value="aceptar">
+            <input type="text" name="comentario_empleado" class="form-input" placeholder="Comentario del empleado">
+            <button class="btn btn-success btn-sm">Aceptar</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="text-muted text-sm">Sin evaluaciones registradas.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const data = {
+  {% for p in plantillas %}
+    "{{ p.id }}": {{ p.criterios_json|safe }},
+  {% endfor %}
+  };
+  const sel = document.getElementById('selPlantilla');
+  const box = document.getElementById('criteriosBox');
+  if (!sel || !box) return;
+  function render() {
+    const criterios = data[sel.value] || [];
+    let html = '<div class="card-title" style="margin-bottom:8px;font-size:13px">Criterios</div>';
+    if (!criterios.length) {
+      box.innerHTML = '<p class="text-muted text-sm">Sin criterios en plantilla.</p>';
+      return;
+    }
+    criterios.forEach(c => {
+      const id = String(c.id || '').trim();
+      if (!id) return;
+      const maxv = Number(c.max || 5);
+      html += '<div class="form-group mb-16"><label class="form-label">'+(c.texto||id)+' (max '+maxv+')</label><input class="form-input" type="number" min="0" max="'+maxv+'" step="0.1" name="criterio_'+id+'" required></div>';
+    });
+    box.innerHTML = html;
+  }
+  sel.addEventListener('change', render);
+  render();
+})();
+</script>
+{% endblock %}

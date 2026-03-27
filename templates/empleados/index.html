@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Empleados{% endblock %}
+{% block page_title %}Ciclo laboral{% endblock %}
+{% block page_sub %}Gestión de empleados, movimientos y estado laboral{% endblock %}
+
+{% block content %}
+<div class="card mb-24">
+  <div class="flex justify-between items-center mb-16">
+    <div class="card-title" style="margin-bottom:0">Empleados</div>
+    <form method="get" class="flex gap-8 items-center">
+      <label class="text-sm text-muted">Estado</label>
+      <select name="estado" class="form-select" style="width:180px">
+        <option value="">Todos</option>
+        <option value="activo" {% if estado == 'activo' %}selected{% endif %}>Activo</option>
+        <option value="suspendido" {% if estado == 'suspendido' %}selected{% endif %}>Suspendido</option>
+        <option value="retiro" {% if estado == 'retiro' %}selected{% endif %}>Retiro</option>
+        <option value="despedido" {% if estado == 'despedido' %}selected{% endif %}>Despedido</option>
+      </select>
+      <button class="btn btn-secondary">Filtrar</button>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Cédula</th>
+          <th>Nombre</th>
+          <th>Estado</th>
+          <th>Cargo actual</th>
+          <th>Sede</th>
+          <th>Ingreso</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for e in empleados %}
+        {% set actual = (e.asignaciones|selectattr('es_actual')|list|first) %}
+        <tr>
+          <td class="font-mono">{{ e.cedula }}</td>
+          <td>{{ e.candidato.nombre_completo if e.candidato else e.cedula }}</td>
+          <td><span class="badge {% if e.estado_laboral == 'activo' %}badge-green{% elif e.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">{{ e.estado_laboral_legible }}</span></td>
+          <td>{{ actual.cargo.nombre if actual and actual.cargo else '—' }}</td>
+          <td>{{ actual.sede.nombre if actual and actual.sede else '—' }}</td>
+          <td>{{ e.fecha_ingreso.strftime('%Y-%m-%d') if e.fecha_ingreso else '—' }}</td>
+          <td class="text-right"><a class="btn btn-sm btn-primary" href="{{ url_for('empleados.detalle', emp_id=e.id) }}">Ver</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="text-muted">No hay empleados registrados todavía.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

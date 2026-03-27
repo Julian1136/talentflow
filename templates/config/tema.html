@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Tema{% endblock %}
+{% block page_title %}Personalización visual{% endblock %}
+{% block page_sub %}Rebranding y configuración de estilo corporativo{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:900px">
+  <div class="card-title">Tema corporativo</div>
+  <form method="post" class="form-grid">
+    <div class="form-group">
+      <label class="form-label">Nombre del tema</label>
+      <input class="form-input" name="nombre" value="{{ cfg.nombre }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Texto del logo</label>
+      <input class="form-input" name="logo_texto" value="{{ cfg.logo_texto }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Color primario</label>
+      <input type="color" class="form-input" name="color_primario" value="{{ cfg.color_primario }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Color secundario</label>
+      <input type="color" class="form-input" name="color_secundario" value="{{ cfg.color_secundario }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Color fondo</label>
+      <input type="color" class="form-input" name="fondo" value="{{ cfg.fondo }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Color superficie</label>
+      <input type="color" class="form-input" name="superficie" value="{{ cfg.superficie }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Radio de bordes (px)</label>
+      <input type="number" min="4" max="24" class="form-input" name="radio_px" value="{{ cfg.radio_px }}">
+    </div>
+    <div class="form-full">
+      <button class="btn btn-primary">Guardar personalización</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

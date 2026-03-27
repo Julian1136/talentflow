@@ -6,17 +6,24 @@ import csv
 import io
 from collections import defaultdict
 
-from flask import Blueprint, Response, jsonify, render_template
+from flask import Blueprint, Response, jsonify, redirect, render_template, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import case, func
 
 from extensions import db
 from models import (
     Aplicacion,
+    AsignacionLaboral,
+    Cargo,
     Candidato,
+    Desvinculacion,
+    Empleado,
+    EvaluacionDesempeno,
     ESTADOS_APLICACION,
     ESTADOS_DICT,
     HistorialProceso,
+    NovedadDisciplinaria,
+    Sede,
     Vacante,
 )
 
@@ -61,6 +68,32 @@ def index():
         en_proceso=en_proceso,
         estados_data=estados_data,
         ultimas_aplicaciones=ultimas_aplicaciones,
+    )
+
+
+@dashboard_bp.route("/dashboard/api/hr/resumen")
+@login_required
+def api_hr_resumen():
+    if not current_user.es_rrhh:
+        return jsonify({"error": "Solo RRHH/administración."}), 403
+
+    activos = Empleado.query.filter_by(estado_laboral="activo").count()
+    retirados = Empleado.query.filter(Empleado.estado_laboral.in_(["retiro", "despedido"])).count()
+    asignaciones_historicas = (
+        db.session.query(func.count()).select_from(AsignacionLaboral).scalar() or 0
+    )
+    desv = Desvinculacion.query.count()
+    evals = EvaluacionDesempeno.query.count()
+    novedades = NovedadDisciplinaria.query.count()
+    return jsonify(
+        {
+            "activos": activos,
+            "retirados": retirados,
+            "asignaciones_historicas": int(asignaciones_historicas),
+            "desvinculaciones": desv,
+            "evaluaciones": evals,
+            "novedades_disciplinarias": novedades,
+        }
     )
 
 
@@ -224,4 +257,106 @@ def exportar_candidatos():
         output,
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=candidatos_talentflow.csv"},
+    )
+
+
+@reportes_bp.route("/exportar-empleados")
+@login_required
+def exportar_empleados():
+    if not current_user.es_rrhh:
+        return redirect(url_for("reportes.index"))
+
+    empleados = Empleado.query.order_by(Empleado.fecha_ingreso.desc()).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "ID Empleado",
+            "Cedula",
+            "Nombre",
+            "Estado Laboral",
+            "Cargo Actual",
+            "Sede Actual",
+            "Fecha Ingreso",
+            "Fecha Salida",
+            "Motivo Salida",
+        ]
+    )
+    for emp in empleados:
+        actual = next((a for a in emp.asignaciones if a.es_actual), None)
+        writer.writerow(
+            [
+                emp.id,
+                emp.cedula,
+                emp.candidato.nombre_completo if emp.candidato else emp.cedula,
+                emp.estado_laboral,
+                actual.cargo.nombre if actual and actual.cargo else "",
+                actual.sede.nombre if actual and actual.sede else "",
+                emp.fecha_ingreso.isoformat() if emp.fecha_ingreso else "",
+                emp.fecha_salida.isoformat() if emp.fecha_salida else "",
+                emp.motivo_salida or "",
+            ]
+        )
+    output.seek(0)
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=empleados_hr.csv"},
+    )
+
+
+@reportes_bp.route("/exportar-evaluaciones-desempeno")
+@login_required
+def exportar_evaluaciones_desempeno():
+    if not current_user.es_rrhh:
+        return redirect(url_for("reportes.index"))
+
+    rows = (
+        db.session.query(
+            EvaluacionDesempeno,
+            Empleado,
+            Cargo.nombre.label("cargo_nombre"),
+            Sede.nombre.label("sede_nombre"),
+        )
+        .join(Empleado, Empleado.id == EvaluacionDesempeno.id_empleado)
+        .outerjoin(AsignacionLaboral, db.and_(AsignacionLaboral.id_empleado == Empleado.id, AsignacionLaboral.es_actual.is_(True)))
+        .outerjoin(Cargo, Cargo.id == AsignacionLaboral.id_cargo)
+        .outerjoin(Sede, Sede.id == AsignacionLaboral.id_sede)
+        .order_by(EvaluacionDesempeno.fecha_registro.desc())
+        .all()
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Evaluacion ID",
+            "Periodo",
+            "Cedula",
+            "Empleado",
+            "Cargo",
+            "Sede",
+            "Puntaje",
+            "Estado Aceptacion",
+            "Fecha Evaluacion",
+        ]
+    )
+    for ev, emp, cargo_nombre, sede_nombre in rows:
+        writer.writerow(
+            [
+                ev.id,
+                ev.periodo,
+                emp.cedula,
+                emp.candidato.nombre_completo if emp.candidato else emp.cedula,
+                cargo_nombre or "",
+                sede_nombre or "",
+                ev.puntaje_total or 0,
+                ev.estado_aceptacion,
+                ev.fecha_evaluacion.isoformat() if ev.fecha_evaluacion else "",
+            ]
+        )
+    output.seek(0)
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=evaluaciones_desempeno.csv"},
     )

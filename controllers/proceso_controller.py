@@ -21,6 +21,7 @@ from models import (
     Usuario,
 )
 from extensions import db
+from services.hr_lifecycle import asegurar_empleado_por_contratacion
 
 proceso_bp = Blueprint("proceso", __name__, url_prefix="/proceso")
 
@@ -117,6 +118,8 @@ def cambiar_estado(app_id):
         estado_nuevo=nuevo_estado,
         obs=observaciones,
     )
+    if nuevo_estado == "contratado" and estado_anterior != "contratado":
+        asegurar_empleado_por_contratacion(aplicacion, current_user.id)
     db.session.commit()
 
     try:
@@ -239,6 +242,168 @@ def resultado_entrevista(ent_id):
     db.session.commit()
     flash("Resultado de entrevista registrado.", "success")
     return redirect(url_for("proceso.detalle", app_id=aplicacion.id))
+
+
+@proceso_bp.route("/entrevista/<int:ent_id>/reenviar", methods=["POST"])
+@login_required
+def reenviar_entrevista(ent_id):
+    if not current_user.es_reclutador:
+        flash("Sin permisos.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    entrevista = db.session.get(Entrevista, ent_id)
+    if not entrevista:
+        abort(404)
+    if entrevista.resultado == "cancelada":
+        flash("La entrevista está cancelada; no se puede reenviar la citación.", "warning")
+        return redirect(url_for("proceso.detalle", app_id=entrevista.id_aplicacion))
+
+    enviado = False
+    try:
+        from services.email_service import notificar_entrevista_programada
+
+        enviado = notificar_entrevista_programada(entrevista)
+    except Exception:
+        enviado = False
+
+    _registrar_historial(
+        entrevista.aplicacion,
+        "Citación de entrevista reenviada",
+        obs=f"Entrevista #{entrevista.id} ({entrevista.tipo or 'sin tipo'})",
+    )
+    db.session.commit()
+
+    if enviado:
+        flash("Citación reenviada al candidato.", "success")
+    else:
+        flash("No se pudo enviar el correo; revisa la configuración de email.", "warning")
+    return redirect(url_for("proceso.detalle", app_id=entrevista.id_aplicacion))
+
+
+@proceso_bp.route("/entrevista/<int:ent_id>/cancelar", methods=["POST"])
+@login_required
+def cancelar_entrevista(ent_id):
+    if not current_user.es_reclutador:
+        flash("Sin permisos.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    entrevista = db.session.get(Entrevista, ent_id)
+    if not entrevista:
+        abort(404)
+    if entrevista.resultado == "cancelada":
+        flash("La entrevista ya estaba cancelada.", "info")
+        return redirect(url_for("proceso.detalle", app_id=entrevista.id_aplicacion))
+
+    motivo = (request.form.get("motivo_cancelacion") or "").strip()
+    entrevista.resultado = "cancelada"
+    entrevista.observaciones = (entrevista.observaciones or "")
+    if motivo:
+        entrevista.observaciones = (
+            (entrevista.observaciones + " | " if entrevista.observaciones else "")
+            + f"Cancelación: {motivo}"
+        )
+
+    aplicacion = entrevista.aplicacion
+    estado_ant = aplicacion.estado
+    if estado_ant == "entrevista_programada":
+        aplicacion.estado = "contactado"
+    _registrar_historial(
+        aplicacion,
+        "Entrevista cancelada",
+        estado_ant=estado_ant,
+        estado_nuevo=aplicacion.estado,
+        obs=motivo or f"Entrevista #{entrevista.id} cancelada.",
+    )
+
+    notificado = False
+    try:
+        from services.email_service import notificar_entrevista_cancelada
+
+        notificado = notificar_entrevista_cancelada(entrevista, motivo=motivo)
+    except Exception:
+        notificado = False
+
+    db.session.commit()
+    if notificado:
+        flash("Entrevista cancelada y candidato notificado.", "warning")
+    else:
+        flash("Entrevista cancelada.", "warning")
+    return redirect(url_for("proceso.detalle", app_id=entrevista.id_aplicacion))
+
+
+@proceso_bp.route("/entrevista/<int:ent_id>/reprogramar", methods=["POST"])
+@login_required
+def reprogramar_entrevista(ent_id):
+    if not current_user.es_reclutador:
+        flash("Sin permisos.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    anterior = db.session.get(Entrevista, ent_id)
+    if not anterior:
+        abort(404)
+    if anterior.resultado == "cancelada":
+        flash("No se puede reprogramar una entrevista ya cancelada.", "warning")
+        return redirect(url_for("proceso.detalle", app_id=anterior.id_aplicacion))
+
+    fecha_str = request.form.get("fecha_programada")
+    if not fecha_str:
+        flash("Debes indicar fecha y hora para reprogramar.", "danger")
+        return redirect(url_for("proceso.detalle", app_id=anterior.id_aplicacion))
+    try:
+        fecha = datetime.strptime(fecha_str, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        flash("Formato de fecha inválido.", "danger")
+        return redirect(url_for("proceso.detalle", app_id=anterior.id_aplicacion))
+
+    nuevo_tipo = request.form.get("tipo") or anterior.tipo
+    nuevo_lugar = request.form.get("lugar") or anterior.lugar
+    nuevo_entrevistador = request.form.get("id_entrevistador", type=int) or anterior.id_entrevistador or current_user.id
+    motivo = (request.form.get("motivo_reprogramacion") or "").strip()
+
+    anterior.resultado = "reprogramada"
+    anterior.observaciones = (anterior.observaciones or "")
+    if motivo:
+        anterior.observaciones = (
+            (anterior.observaciones + " | " if anterior.observaciones else "")
+            + f"Reprogramación: {motivo}"
+        )
+
+    nueva = Entrevista(
+        id_aplicacion=anterior.id_aplicacion,
+        tipo=nuevo_tipo,
+        fecha_programada=fecha,
+        lugar=nuevo_lugar,
+        id_entrevistador=nuevo_entrevistador,
+        resultado="pendiente",
+    )
+    db.session.add(nueva)
+
+    aplicacion = anterior.aplicacion
+    estado_ant = aplicacion.estado
+    aplicacion.estado = "entrevista_programada"
+    _registrar_historial(
+        aplicacion,
+        "Entrevista reprogramada",
+        estado_ant=estado_ant,
+        estado_nuevo="entrevista_programada",
+        obs=motivo or f"Entrevista #{anterior.id} -> nueva fecha {fecha.strftime('%d/%m/%Y %H:%M')}",
+    )
+
+    db.session.commit()
+
+    enviado = False
+    try:
+        from services.email_service import notificar_entrevista_programada
+
+        enviado = notificar_entrevista_programada(nueva)
+    except Exception:
+        enviado = False
+
+    if enviado:
+        flash("Entrevista reprogramada y citación reenviada.", "success")
+    else:
+        flash("Entrevista reprogramada.", "success")
+    return redirect(url_for("proceso.detalle", app_id=anterior.id_aplicacion))
 
 
 # ─── Evaluación psicológica ───────────────────────────────────────────────────

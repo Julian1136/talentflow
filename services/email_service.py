@@ -194,6 +194,46 @@ def notificar_entrevista_programada(entrevista) -> bool:
     )
 
 
+def notificar_entrevista_cancelada(entrevista, motivo: str = "") -> bool:
+    """Notifica al candidato que una entrevista fue cancelada."""
+    ap = entrevista.aplicacion
+    candidato = ap.candidato
+    vacante = ap.vacante
+
+    if not candidato.correo:
+        return False
+
+    fecha_fmt = (
+        entrevista.fecha_programada.strftime("%A %d de %B de %Y, %H:%M")
+        if entrevista.fecha_programada
+        else "Por confirmar"
+    )
+    motivo_txt = (motivo or "").strip()
+    motivo_html = f"<p><strong>Motivo:</strong> {motivo_txt}</p>" if motivo_txt else ""
+
+    cuerpo = f"""
+      <p>Hola <strong>{candidato.nombres}</strong>,</p>
+      <p>
+        Te informamos que la entrevista programada para la vacante
+        <strong>{vacante.titulo}</strong> ({fecha_fmt}) fue cancelada.
+      </p>
+      {motivo_html}
+      <p>
+        Nuestro equipo de RRHH te contactará para reprogramar en caso de continuar
+        con la siguiente etapa del proceso.
+      </p>
+    """
+    html = _render_email(
+        subtitulo=f"Entrevista cancelada · {vacante.titulo}",
+        cuerpo=cuerpo,
+    )
+    return _enviar(
+        destinatario=candidato.correo,
+        asunto=f"[TalentFlow] Entrevista cancelada — {vacante.titulo}",
+        html=html,
+    )
+
+
 def notificar_cambio_estado(aplicacion, estado_anterior: str, estado_nuevo: str) -> bool:
     """
     Notifica al candidato cuando su proceso avanza a un estado relevante.

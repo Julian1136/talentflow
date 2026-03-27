@@ -22,7 +22,12 @@ def analizar_compatibilidad(
     """
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        return False, "ANTHROPIC_API_KEY no configurada."
+        return (
+            False,
+            "Falta la clave de Anthropic. En el archivo .env de la raíz del proyecto define "
+            "ANTHROPIC_API_KEY= (obtén la clave en https://console.anthropic.com/), guarda y "
+            "reinicia el servidor (python app.py).",
+        )
 
     try:
         from anthropic import Anthropic

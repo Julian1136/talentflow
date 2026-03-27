@@ -29,7 +29,17 @@
       --radius-sm: 6px;
       --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
       --shadow-md: 0 4px 12px rgba(0,0,0,.08);
+      --brand-secondary: #0f172a;
     }
+    {% if theme_cfg %}
+    :root {
+      --bg: {{ theme_cfg.fondo or '#f5f4f0' }};
+      --surface: {{ theme_cfg.superficie or '#ffffff' }};
+      --accent: {{ theme_cfg.color_primario or '#2563eb' }};
+      --brand-secondary: {{ theme_cfg.color_secundario or '#0f172a' }};
+      --radius: {{ theme_cfg.radio_px or 10 }}px;
+    }
+    {% endif %}
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -315,7 +325,7 @@
     <a href="{{ url_for('dashboard.index') }}" class="logo-mark">
       <div class="logo-icon">🎯</div>
       <div>
-        <div class="logo-text">TalentFlow</div>
+        <div class="logo-text">{{ theme_cfg.logo_texto if theme_cfg else 'TalentFlow' }}</div>
         <div class="logo-sub">Gestión de Talento</div>
       </div>
     </a>
@@ -345,6 +355,10 @@
          class="nav-link {% if request.blueprint == 'calendario' %}active{% endif %}">
         <span class="icon">📅</span> Calendario
       </a>
+      <a href="{{ url_for('empleados.index') }}"
+         class="nav-link {% if request.blueprint == 'empleados' %}active{% endif %}">
+        <span class="icon">🏢</span> Empleados
+      </a>
     </div>
 
     {% if current_user.es_admin %}
@@ -355,6 +369,9 @@
       </a>
       <a href="{{ url_for('reportes.index') }}" class="nav-link {% if request.blueprint == 'reportes' %}active{% endif %}">
         <span class="icon">📈</span> Reportes
+      </a>
+      <a href="{{ url_for('configuracion.tema') }}" class="nav-link {% if request.blueprint == 'configuracion' %}active{% endif %}">
+        <span class="icon">🎨</span> Tema
       </a>
     </div>
     {% endif %}

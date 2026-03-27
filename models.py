@@ -3,7 +3,7 @@ TalentFlow — Modelos de base de datos (SQLAlchemy)
 Todos los modelos del sistema en un único archivo.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from flask_login import UserMixin
 import bcrypt
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -46,6 +46,16 @@ class Usuario(UserMixin, db.Model):
     evaluaciones_plantilla_enviadas = db.relationship(
         "EvaluacionPlantillaRespuesta", back_populates="usuario"
     )
+    empleados_jefe = db.relationship(
+        "AsignacionLaboral",
+        back_populates="jefe",
+        foreign_keys="AsignacionLaboral.id_jefe",
+    )
+    evaluaciones_desempeno_como_jefe = db.relationship(
+        "EvaluacionDesempeno",
+        back_populates="jefe_evaluador",
+        foreign_keys="EvaluacionDesempeno.id_jefe_evaluador",
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -80,6 +90,14 @@ class Usuario(UserMixin, db.Model):
     @property
     def es_psicologo(self):
         return self.rol.nombre == "psicologo"
+
+    @property
+    def es_jefe_area(self):
+        return self.rol.nombre in ("administrador", "jefe_area")
+
+    @property
+    def es_rrhh(self):
+        return self.rol.nombre in ("administrador", "rrhh", "reclutador")
 
     def __repr__(self):
         return f"<Usuario {self.correo}>"
@@ -163,6 +181,27 @@ ESTADOS_APLICACION = [
 ]
 
 ESTADOS_DICT = dict(ESTADOS_APLICACION)
+
+ESTADOS_LABORALES = [
+    ("candidato", "Candidato"),
+    ("pre_ingreso", "Pre-ingreso"),
+    ("activo", "Activo"),
+    ("suspendido", "Suspendido"),
+    ("retiro", "Retiro"),
+    ("despedido", "Despedido"),
+]
+
+ESTADOS_LABORALES_DICT = dict(ESTADOS_LABORALES)
+
+TIPOS_MOVIMIENTO_LABORAL = [
+    ("ingreso", "Ingreso"),
+    ("ascenso", "Ascenso"),
+    ("traslado", "Traslado"),
+    ("cambio_sede", "Cambio de sede"),
+    ("cambio_cargo", "Cambio de cargo"),
+    ("cambio_jefe", "Cambio de jefe"),
+    ("ajuste_salarial", "Ajuste salarial"),
+]
 
 
 class Vacante(db.Model):
@@ -380,3 +419,225 @@ class HistorialProceso(db.Model):
 
     candidato = db.relationship("Candidato", back_populates="historial")
     aplicacion = db.relationship("Aplicacion", back_populates="historial")
+
+
+# ══════════════════════════════════════════════════════════════
+# CICLO LABORAL (HR)
+# ══════════════════════════════════════════════════════════════
+
+class Sede(db.Model):
+    __tablename__ = "sedes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(30), unique=True, nullable=False)
+    nombre = db.Column(db.String(120), nullable=False)
+    ciudad = db.Column(db.String(80))
+    direccion = db.Column(db.String(255))
+    activa = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    asignaciones = db.relationship("AsignacionLaboral", back_populates="sede")
+
+    def __repr__(self):
+        return f"<Sede {self.codigo} - {self.nombre}>"
+
+
+class Cargo(db.Model):
+    __tablename__ = "cargos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(40), unique=True, nullable=False)
+    nombre = db.Column(db.String(120), nullable=False)
+    area = db.Column(db.String(100))
+    nivel = db.Column(db.String(50))
+    competencias_json = db.Column(db.Text)
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    asignaciones = db.relationship("AsignacionLaboral", back_populates="cargo")
+    evaluaciones_plantillas = db.relationship(
+        "PlantillaDesempenoCargo", back_populates="cargo"
+    )
+
+    def __repr__(self):
+        return f"<Cargo {self.codigo} - {self.nombre}>"
+
+
+class Empleado(db.Model):
+    __tablename__ = "empleados"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cedula = db.Column(db.String(20), db.ForeignKey("candidatos.cedula"), unique=True, nullable=False)
+    id_usuario = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    id_aplicacion_origen = db.Column(db.Integer, db.ForeignKey("aplicaciones.id"))
+    estado_laboral = db.Column(db.String(30), default="activo", nullable=False)
+    fecha_ingreso = db.Column(db.Date, default=date.today)
+    fecha_salida = db.Column(db.Date)
+    motivo_salida = db.Column(db.String(120))
+    notas = db.Column(db.Text)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    candidato = db.relationship("Candidato")
+    usuario = db.relationship("Usuario")
+    aplicacion_origen = db.relationship("Aplicacion")
+    asignaciones = db.relationship("AsignacionLaboral", back_populates="empleado")
+    movimientos = db.relationship("MovimientoLaboral", back_populates="empleado")
+    evaluaciones_desempeno = db.relationship("EvaluacionDesempeno", back_populates="empleado")
+    novedades_disciplinarias = db.relationship("NovedadDisciplinaria", back_populates="empleado")
+    desvinculaciones = db.relationship("Desvinculacion", back_populates="empleado")
+    eventos = db.relationship("EventoLaboral", back_populates="empleado")
+
+    @property
+    def estado_laboral_legible(self):
+        return ESTADOS_LABORALES_DICT.get(self.estado_laboral, self.estado_laboral)
+
+    def __repr__(self):
+        return f"<Empleado {self.cedula} estado={self.estado_laboral}>"
+
+
+class AsignacionLaboral(db.Model):
+    __tablename__ = "asignaciones_laborales"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    id_cargo = db.Column(db.Integer, db.ForeignKey("cargos.id"), nullable=False)
+    id_sede = db.Column(db.Integer, db.ForeignKey("sedes.id"), nullable=False)
+    id_jefe = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    fecha_inicio = db.Column(db.Date, nullable=False, default=date.today)
+    fecha_fin = db.Column(db.Date)
+    salario = db.Column(db.Numeric(12, 2))
+    es_actual = db.Column(db.Boolean, default=True, nullable=False)
+    observaciones = db.Column(db.Text)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empleado = db.relationship("Empleado", back_populates="asignaciones")
+    cargo = db.relationship("Cargo", back_populates="asignaciones")
+    sede = db.relationship("Sede", back_populates="asignaciones")
+    jefe = db.relationship("Usuario", back_populates="empleados_jefe", foreign_keys=[id_jefe])
+
+
+class MovimientoLaboral(db.Model):
+    __tablename__ = "movimientos_laborales"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    tipo = db.Column(db.String(40), nullable=False)
+    id_asignacion_anterior = db.Column(db.Integer, db.ForeignKey("asignaciones_laborales.id"))
+    id_asignacion_nueva = db.Column(db.Integer, db.ForeignKey("asignaciones_laborales.id"))
+    fecha_movimiento = db.Column(db.Date, default=date.today, nullable=False)
+    motivo = db.Column(db.Text)
+    id_usuario = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empleado = db.relationship("Empleado", back_populates="movimientos")
+    usuario = db.relationship("Usuario")
+    asignacion_anterior = db.relationship("AsignacionLaboral", foreign_keys=[id_asignacion_anterior])
+    asignacion_nueva = db.relationship("AsignacionLaboral", foreign_keys=[id_asignacion_nueva])
+
+
+class PlantillaDesempenoCargo(db.Model):
+    __tablename__ = "plantillas_desempeno_cargo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_cargo = db.Column(db.Integer, db.ForeignKey("cargos.id"), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    version = db.Column(db.Integer, default=1, nullable=False)
+    criterios_json = db.Column(db.Text, nullable=False)
+    activa = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    cargo = db.relationship("Cargo", back_populates="evaluaciones_plantillas")
+    evaluaciones = db.relationship("EvaluacionDesempeno", back_populates="plantilla")
+
+
+class EvaluacionDesempeno(db.Model):
+    __tablename__ = "evaluaciones_desempeno"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    id_plantilla = db.Column(db.Integer, db.ForeignKey("plantillas_desempeno_cargo.id"), nullable=False)
+    periodo = db.Column(db.String(40), nullable=False)
+    id_jefe_evaluador = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    puntaje_total = db.Column(db.Numeric(6, 2))
+    detalle_json = db.Column(db.Text, nullable=False)
+    comentario_jefe = db.Column(db.Text)
+    estado_aceptacion = db.Column(db.String(30), default="pendiente_empleado")
+    comentario_empleado = db.Column(db.Text)
+    fecha_evaluacion = db.Column(db.Date, default=date.today)
+    fecha_aceptacion = db.Column(db.DateTime)
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empleado = db.relationship("Empleado", back_populates="evaluaciones_desempeno")
+    plantilla = db.relationship("PlantillaDesempenoCargo", back_populates="evaluaciones")
+    jefe_evaluador = db.relationship(
+        "Usuario",
+        back_populates="evaluaciones_desempeno_como_jefe",
+        foreign_keys=[id_jefe_evaluador],
+    )
+
+
+class NovedadDisciplinaria(db.Model):
+    __tablename__ = "novedades_disciplinarias"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    tipo = db.Column(db.String(50), nullable=False)
+    severidad = db.Column(db.String(30))
+    descripcion = db.Column(db.Text, nullable=False)
+    estado = db.Column(db.String(30), default="registrada")
+    fecha_falta = db.Column(db.Date, default=date.today)
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
+    id_reporta = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    id_aprueba = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    sancion = db.Column(db.Text)
+
+    empleado = db.relationship("Empleado", back_populates="novedades_disciplinarias")
+    reporta = db.relationship("Usuario", foreign_keys=[id_reporta])
+    aprueba = db.relationship("Usuario", foreign_keys=[id_aprueba])
+
+
+class Desvinculacion(db.Model):
+    __tablename__ = "desvinculaciones"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    tipo = db.Column(db.String(40), nullable=False)  # retiro_voluntario, despido, fin_contrato
+    causa = db.Column(db.Text)
+    fecha_efectiva = db.Column(db.Date, nullable=False)
+    documento_ref = db.Column(db.String(255))
+    id_usuario = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empleado = db.relationship("Empleado", back_populates="desvinculaciones")
+    usuario = db.relationship("Usuario")
+
+
+class EventoLaboral(db.Model):
+    __tablename__ = "eventos_laborales"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    tipo_evento = db.Column(db.String(60), nullable=False)
+    descripcion = db.Column(db.String(200), nullable=False)
+    metadata_json = db.Column(db.Text)
+    id_usuario = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    fecha_evento = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empleado = db.relationship("Empleado", back_populates="eventos")
+    usuario = db.relationship("Usuario")
+
+
+class ConfiguracionTema(db.Model):
+    __tablename__ = "configuracion_tema"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False, default="Tema corporativo")
+    logo_texto = db.Column(db.String(100), default="TalentFlow")
+    color_primario = db.Column(db.String(12), default="#2563eb")
+    color_secundario = db.Column(db.String(12), default="#0f172a")
+    fondo = db.Column(db.String(12), default="#f5f4f0")
+    superficie = db.Column(db.String(12), default="#ffffff")
+    radio_px = db.Column(db.Integer, default=10)
+    actualizado_por = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
