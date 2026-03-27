@@ -1,0 +1,164 @@
+{% extends "empleados/catalogos/layout.html" %}
+{% block catalog_title %}Sedes — Catálogos HR{% endblock %}
+{% block catalog_h1 %}Sedes{% endblock %}
+{% block catalog_subtitle %}Ubicaciones y centros de costo para asignaciones laborales{% endblock %}
+
+{% block catalog_hero %}
+<h2>Maestro de sedes</h2>
+<p>Define códigos únicos, datos de contacto geográfico y estado operativo. Las sedes se usan en movimientos y reportes por centro de costo.</p>
+{% endblock %}
+
+{% block catalog_body %}
+<div class="hr-cat-grid">
+
+  {# ── Create panel ── #}
+  <div class="hr-cat-panel">
+    <div class="hr-cat-panel__hd">
+      <h3>➕ Nueva sede</h3>
+      <span>El código debe ser único en todo el sistema</span>
+    </div>
+    <div class="hr-cat-panel__bd">
+      <form method="post" action="{{ url_for('empleados.crear_sede') }}" class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Código</label>
+          <input name="codigo" class="form-input" required placeholder="BOG-NORTE" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input name="nombre" class="form-input" required placeholder="Sede Norte">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ciudad</label>
+          <input name="ciudad" class="form-input" placeholder="Bogotá">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dirección</label>
+          <input name="direccion" class="form-input" placeholder="Calle / Carrera">
+        </div>
+        <div class="form-full">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">
+            <input type="checkbox" name="activa" checked style="width:16px;height:16px;accent-color:var(--accent);">
+            <span style="font-weight:600;">Sede activa</span>
+          </label>
+        </div>
+        <div class="form-full">
+          <button type="submit" class="btn btn-primary" style="width:100%;">Crear sede</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Directory panel ── #}
+  <div class="hr-cat-panel">
+    <div class="hr-cat-panel__hd">
+      <h3>📍 Directorio de sedes</h3>
+      <span>Búsqueda por código, nombre o ciudad</span>
+    </div>
+    <div class="hr-cat-panel__bd">
+      <form method="get" action="{{ url_for('empleados.catalogos_sedes') }}" class="hr-cat-toolbar">
+        <input type="search" name="q" class="form-input" placeholder="Buscar código, nombre, ciudad…" value="{{ q }}">
+        <button type="submit" class="btn btn-secondary btn-sm">Buscar</button>
+        {% if q %}
+        <a href="{{ url_for('empleados.catalogos_sedes') }}" class="btn btn-secondary btn-sm">✕ Limpiar</a>
+        {% endif %}
+      </form>
+
+      {% if sedes.items %}
+      <div class="hr-cat-table-wrap">
+        <table class="hr-cat-table">
+          <thead>
+            <tr>
+              <th>Código</th><th>Nombre</th><th>Ciudad</th><th>Estado</th>
+              <th style="width:130px;text-align:right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for s in sedes.items %}
+            <tr>
+              <td><span class="font-mono" style="font-size:12px;">{{ s.codigo }}</span></td>
+              <td><strong style="color:var(--text);">{{ s.nombre }}</strong></td>
+              <td style="color:var(--text2);">{{ s.ciudad or '—' }}</td>
+              <td>
+                <span class="badge {{ 'badge-green' if s.activa else 'badge-gray' }}">
+                  {{ '✓ Activa' if s.activa else 'Inactiva' }}
+                </span>
+              </td>
+              <td style="text-align:right;white-space:nowrap;">
+                <button class="btn btn-secondary btn-xs" type="button"
+                  onclick='openEditSede({{ s.id }}, {{ {"codigo": s.codigo, "nombre": s.nombre, "ciudad": s.ciudad, "direccion": s.direccion, "activa": s.activa}|tojson }})'>
+                  Editar
+                </button>
+                <form method="post" action="{{ url_for('empleados.eliminar_sede', sid=s.id) }}" style="display:inline;"
+                      onsubmit="return confirm('¿Eliminar la sede {{ s.nombre }}?');">
+                  <button class="btn btn-danger btn-xs" type="submit">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if sedes.pages > 1 %}
+      <div class="hr-cat-pagination">
+        {% if sedes.has_prev %}
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('empleados.catalogos_sedes', page=sedes.prev_num, q=q) }}">← Anterior</a>
+        {% endif %}
+        <span class="text-sm text-muted">Página {{ sedes.page }} de {{ sedes.pages }}</span>
+        {% if sedes.has_next %}
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('empleados.catalogos_sedes', page=sedes.next_num, q=q) }}">Siguiente →</a>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="hr-cat-empty">
+        <div style="font-size:36px;margin-bottom:10px;">🏢</div>
+        {% if q %}No hay sedes que coincidan con "{{ q }}".{% else %}Crea la primera sede desde el panel izquierdo.{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Edit modal ── #}
+<div class="modal-overlay hr-cat-modal" id="modal-edit-sede">
+  <div class="modal-box">
+    <button type="button" class="modal-close" onclick="closeModal('modal-edit-sede')" aria-label="Cerrar">×</button>
+    <div class="modal-title">✏️ Editar sede</div>
+    <form id="form-edit-sede" method="post" class="form-grid">
+      <div class="form-group"><label class="form-label">Código</label><input id="es-codigo" name="codigo" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Nombre</label><input id="es-nombre" name="nombre" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Ciudad</label><input id="es-ciudad" name="ciudad" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Dirección</label><input id="es-direccion" name="direccion" class="form-input"></div>
+      <div class="form-full">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">
+          <input type="checkbox" id="es-activa" name="activa" style="width:16px;height:16px;accent-color:var(--accent);">
+          <span style="font-weight:600;">Sede activa</span>
+        </label>
+      </div>
+      <div class="form-full"><button type="submit" class="btn btn-primary" style="width:100%;">💾 Guardar cambios</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block catalog_scripts %}
+<script>
+function openModal(id){ document.getElementById(id)?.classList.add('open'); }
+function closeModal(id){ document.getElementById(id)?.classList.remove('open'); }
+
+document.querySelectorAll('.hr-cat-modal').forEach(m => {
+  m.addEventListener('click', ev => { if (ev.target === m) m.classList.remove('open'); });
+});
+
+function openEditSede(id, data) {
+  const f = document.getElementById('form-edit-sede');
+  f.action = "{{ url_for('empleados.editar_sede', sid=0) }}".replace('/0/', '/' + id + '/');
+  document.getElementById('es-codigo').value    = data.codigo    || '';
+  document.getElementById('es-nombre').value    = data.nombre    || '';
+  document.getElementById('es-ciudad').value    = data.ciudad    || '';
+  document.getElementById('es-direccion').value = data.direccion || '';
+  document.getElementById('es-activa').checked  = !!data.activa;
+  openModal('modal-edit-sede');
+}
+</script>
+{% endblock %}

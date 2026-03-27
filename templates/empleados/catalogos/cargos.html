@@ -1,0 +1,175 @@
+{% extends "empleados/catalogos/layout.html" %}
+{% block catalog_title %}Cargos — Catálogos HR{% endblock %}
+{% block catalog_h1 %}Cargos{% endblock %}
+{% block catalog_subtitle %}Puestos del organigrama vinculados a plantillas y asignaciones{% endblock %}
+
+{% block catalog_hero %}
+<h2>Maestro de cargos</h2>
+<p>Centraliza nomenclatura, área, nivel jerárquico y competencias. Un catálogo de cargos consolidado mejora las evaluaciones y los movimientos internos.</p>
+{% endblock %}
+
+{% block catalog_body %}
+<div class="hr-cat-grid">
+
+  {# ── Create ── #}
+  <div class="hr-cat-panel">
+    <div class="hr-cat-panel__hd">
+      <h3>➕ Nuevo cargo</h3>
+      <span>Los códigos deben ser únicos en el sistema</span>
+    </div>
+    <div class="hr-cat-panel__bd">
+      <form method="post" action="{{ url_for('empleados.crear_cargo') }}" class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Código</label>
+          <input name="codigo" class="form-input" required placeholder="ANL-SYS" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input name="nombre" class="form-input" required placeholder="Analista de Sistemas">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Área</label>
+          <input name="area" class="form-input" placeholder="Tecnología">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nivel</label>
+          <input name="nivel" class="form-input" placeholder="Profesional">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Competencias JSON <span style="font-weight:400;color:var(--text3);">(opcional)</span></label>
+          <textarea name="competencias_json" class="form-textarea" rows="3"
+            placeholder='["Trabajo en equipo","Pensamiento analítico"]'></textarea>
+        </div>
+        <div class="form-full">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">
+            <input type="checkbox" name="activo" checked style="width:16px;height:16px;accent-color:var(--accent);">
+            <span style="font-weight:600;">Cargo activo</span>
+          </label>
+        </div>
+        <div class="form-full">
+          <button type="submit" class="btn btn-primary" style="width:100%;">Crear cargo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Directory ── #}
+  <div class="hr-cat-panel">
+    <div class="hr-cat-panel__hd">
+      <h3>📋 Cargos registrados</h3>
+      <span>Búsqueda por código, nombre, área o nivel</span>
+    </div>
+    <div class="hr-cat-panel__bd">
+      <form method="get" action="{{ url_for('empleados.catalogos_cargos') }}" class="hr-cat-toolbar">
+        <input type="search" name="q" class="form-input" placeholder="Buscar en catálogo…" value="{{ q }}">
+        <button type="submit" class="btn btn-secondary btn-sm">Buscar</button>
+        {% if q %}
+        <a href="{{ url_for('empleados.catalogos_cargos') }}" class="btn btn-secondary btn-sm">✕ Limpiar</a>
+        {% endif %}
+      </form>
+
+      {% if cargos.items %}
+      <div class="hr-cat-table-wrap">
+        <table class="hr-cat-table">
+          <thead>
+            <tr>
+              <th>Código</th><th>Nombre</th><th>Área</th><th>Nivel</th><th>Estado</th>
+              <th style="width:130px;text-align:right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for c in cargos.items %}
+            <tr>
+              <td><span class="font-mono" style="font-size:11.5px;background:var(--surface2);padding:2px 7px;border-radius:5px;border:1px solid var(--border);">{{ c.codigo }}</span></td>
+              <td><strong style="color:var(--text);">{{ c.nombre }}</strong></td>
+              <td style="color:var(--text2);">{{ c.area or '—' }}</td>
+              <td style="color:var(--text2);">{{ c.nivel or '—' }}</td>
+              <td>
+                <span class="badge {{ 'badge-green' if c.activo else 'badge-gray' }}">
+                  {{ '✓ Activo' if c.activo else 'Inactivo' }}
+                </span>
+              </td>
+              <td style="text-align:right;white-space:nowrap;">
+                <button class="btn btn-secondary btn-xs" type="button"
+                  onclick='openEditCargo({{ c.id }}, {{ {"codigo": c.codigo, "nombre": c.nombre, "area": c.area, "nivel": c.nivel, "competencias_json": c.competencias_json, "activo": c.activo}|tojson }})'>
+                  Editar
+                </button>
+                <form method="post" action="{{ url_for('empleados.eliminar_cargo', cid=c.id) }}" style="display:inline;"
+                      onsubmit="return confirm('¿Eliminar el cargo {{ c.nombre }}?');">
+                  <button class="btn btn-danger btn-xs" type="submit">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if cargos.pages > 1 %}
+      <div class="hr-cat-pagination">
+        {% if cargos.has_prev %}
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('empleados.catalogos_cargos', page=cargos.prev_num, q=q) }}">← Anterior</a>
+        {% endif %}
+        <span class="text-sm text-muted">Página {{ cargos.page }} de {{ cargos.pages }}</span>
+        {% if cargos.has_next %}
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('empleados.catalogos_cargos', page=cargos.next_num, q=q) }}">Siguiente →</a>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="hr-cat-empty">
+        <div style="font-size:36px;margin-bottom:10px;">📋</div>
+        {% if q %}Sin resultados para "{{ q }}".{% else %}Crea el primer cargo desde el panel izquierdo.{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Edit Modal ── #}
+<div class="modal-overlay hr-cat-modal" id="modal-edit-cargo">
+  <div class="modal-box">
+    <button type="button" class="modal-close" onclick="closeModal('modal-edit-cargo')" aria-label="Cerrar">×</button>
+    <div class="modal-title">✏️ Editar cargo</div>
+    <form id="form-edit-cargo" method="post" class="form-grid">
+      <div class="form-group"><label class="form-label">Código</label><input id="ec-codigo" name="codigo" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Nombre</label><input id="ec-nombre" name="nombre" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Área</label><input id="ec-area" name="area" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Nivel</label><input id="ec-nivel" name="nivel" class="form-input"></div>
+      <div class="form-group form-full">
+        <label class="form-label">Competencias JSON</label>
+        <textarea id="ec-comp" name="competencias_json" class="form-textarea" rows="4"></textarea>
+      </div>
+      <div class="form-full">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">
+          <input type="checkbox" id="ec-activo" name="activo" style="width:16px;height:16px;accent-color:var(--accent);">
+          <span style="font-weight:600;">Cargo activo</span>
+        </label>
+      </div>
+      <div class="form-full"><button type="submit" class="btn btn-primary" style="width:100%;">💾 Guardar cambios</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block catalog_scripts %}
+<script>
+function openModal(id){ document.getElementById(id)?.classList.add('open'); }
+function closeModal(id){ document.getElementById(id)?.classList.remove('open'); }
+
+document.querySelectorAll('.hr-cat-modal').forEach(m => {
+  m.addEventListener('click', ev => { if (ev.target === m) m.classList.remove('open'); });
+});
+
+function openEditCargo(id, data) {
+  const f = document.getElementById('form-edit-cargo');
+  f.action = "{{ url_for('empleados.editar_cargo', cid=0) }}".replace('/0/', '/' + id + '/');
+  document.getElementById('ec-codigo').value = data.codigo || '';
+  document.getElementById('ec-nombre').value = data.nombre || '';
+  document.getElementById('ec-area').value   = data.area   || '';
+  document.getElementById('ec-nivel').value  = data.nivel  || '';
+  document.getElementById('ec-comp').value   = data.competencias_json || '';
+  document.getElementById('ec-activo').checked = !!data.activo;
+  openModal('modal-edit-cargo');
+}
+</script>
+{% endblock %}

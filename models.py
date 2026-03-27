@@ -99,6 +99,17 @@ class Usuario(UserMixin, db.Model):
     def es_rrhh(self):
         return self.rol.nombre in ("administrador", "rrhh", "reclutador")
 
+    @property
+    def puede_ver_seleccion(self):
+        """Vacantes, candidatos y proceso (excluye portal empleado u otros roles)."""
+        return self.rol.nombre in (
+            "administrador",
+            "reclutador",
+            "rrhh",
+            "jefe_area",
+            "psicologo",
+        )
+
     def __repr__(self):
         return f"<Usuario {self.correo}>"
 
@@ -224,10 +235,6 @@ class Vacante(db.Model):
 
     aplicaciones = db.relationship("Aplicacion", back_populates="vacante")
 
-    @property
-    def total_candidatos(self):
-        return len(self.aplicaciones)
-
     def __repr__(self):
         return f"<Vacante {self.titulo}>"
 
@@ -243,6 +250,7 @@ class Aplicacion(db.Model):
     estado = db.Column(db.String(60), default="hoja_de_vida_recibida")
     fecha_aplicacion = db.Column(db.DateTime, default=datetime.utcnow)
     score = db.Column(db.Numeric(5, 2))
+    analisis_ia_text = db.Column(db.Text)
 
     candidato = db.relationship("Candidato", back_populates="aplicaciones")
     vacante = db.relationship("Vacante", back_populates="aplicaciones")
@@ -254,6 +262,11 @@ class Aplicacion(db.Model):
         "EvaluacionPlantillaRespuesta", back_populates="aplicacion"
     )
     historial = db.relationship("HistorialProceso", back_populates="aplicacion")
+    notas_internas = db.relationship(
+        "NotaInternaAplicacion",
+        back_populates="aplicacion",
+        order_by="NotaInternaAplicacion.id.desc()",
+    )
 
     @property
     def estado_legible(self):
@@ -302,6 +315,7 @@ class Entrevista(db.Model):
     observaciones = db.Column(db.Text)
     fecha_realizada = db.Column(db.DateTime)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    recordatorio_enviado_en = db.Column(db.DateTime)
 
     aplicacion = db.relationship("Aplicacion", back_populates="entrevistas")
     entrevistador = db.relationship("Usuario", back_populates="entrevistas_conducidas")
@@ -421,6 +435,21 @@ class HistorialProceso(db.Model):
     aplicacion = db.relationship("Aplicacion", back_populates="historial")
 
 
+class NotaInternaAplicacion(db.Model):
+    """Notas solo visibles para usuarios internos en el detalle de proceso."""
+
+    __tablename__ = "notas_internas_aplicacion"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_aplicacion = db.Column(db.Integer, db.ForeignKey("aplicaciones.id"), nullable=False)
+    id_usuario = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    cuerpo = db.Column(db.Text, nullable=False)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    aplicacion = db.relationship("Aplicacion", back_populates="notas_internas")
+    usuario = db.relationship("Usuario")
+
+
 # ══════════════════════════════════════════════════════════════
 # CICLO LABORAL (HR)
 # ══════════════════════════════════════════════════════════════
@@ -487,6 +516,11 @@ class Empleado(db.Model):
     novedades_disciplinarias = db.relationship("NovedadDisciplinaria", back_populates="empleado")
     desvinculaciones = db.relationship("Desvinculacion", back_populates="empleado")
     eventos = db.relationship("EventoLaboral", back_populates="empleado")
+    tareas_onboarding = db.relationship(
+        "TareaOnboardingEmpleado",
+        back_populates="empleado",
+        order_by="TareaOnboardingEmpleado.orden.asc()",
+    )
 
     @property
     def estado_laboral_legible(self):
@@ -494,6 +528,19 @@ class Empleado(db.Model):
 
     def __repr__(self):
         return f"<Empleado {self.cedula} estado={self.estado_laboral}>"
+
+
+class TareaOnboardingEmpleado(db.Model):
+    __tablename__ = "tareas_onboarding_empleado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    id_empleado = db.Column(db.Integer, db.ForeignKey("empleados.id"), nullable=False)
+    titulo = db.Column(db.String(200), nullable=False)
+    hecha = db.Column(db.Boolean, default=False)
+    orden = db.Column(db.Integer, default=0)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empleado = db.relationship("Empleado", back_populates="tareas_onboarding")
 
 
 class AsignacionLaboral(db.Model):
@@ -626,6 +673,23 @@ class EventoLaboral(db.Model):
 
     empleado = db.relationship("Empleado", back_populates="eventos")
     usuario = db.relationship("Usuario")
+
+
+class CorreoColaReintento(db.Model):
+    """Correos que fallaron al enviar; el scheduler reintenta con backoff."""
+
+    __tablename__ = "correo_cola_reintento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    destinatario = db.Column(db.String(255), nullable=False)
+    asunto = db.Column(db.String(500), nullable=False)
+    cuerpo_html = db.Column(db.Text, nullable=False)
+    intentos = db.Column(db.Integer, default=0)
+    max_intentos = db.Column(db.Integer, default=5)
+    ultimo_error = db.Column(db.Text)
+    proximo_intento_en = db.Column(db.DateTime)
+    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    enviado_en = db.Column(db.DateTime)
 
 
 class ConfiguracionTema(db.Model):

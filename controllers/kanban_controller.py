@@ -10,7 +10,7 @@ INSTALACIÓN:
   3. En base.html sidebar, agregar enlace al Kanban (ver instrucción al final del archivo)
 """
 
-from flask import Blueprint, render_template, request, jsonify, abort
+from flask import Blueprint, render_template, request, jsonify, abort, flash, redirect, url_for
 from flask_login import login_required, current_user
 from models import Aplicacion, HistorialProceso, Vacante, ESTADOS_APLICACION, ESTADOS_DICT
 from extensions import db
@@ -28,6 +28,10 @@ def index():
     Renderiza el tablero Kanban.
     Permite filtrar por vacante con ?vacante=<id>
     """
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para el tablero Kanban.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     vacantes = Vacante.query.filter_by(estado="abierta").order_by(Vacante.titulo).all()
     vacante_id = request.args.get("vacante", type=int)
     vacante_sel = None
@@ -135,6 +139,9 @@ def datos_columna(estado):
     Retorna JSON con las aplicaciones de una columna específica.
     Útil para refrescar una columna tras cambios externos.
     """
+    if not current_user.puede_ver_seleccion:
+        abort(403)
+
     estados_validos = [e[0] for e in ESTADOS_APLICACION]
     if estado not in estados_validos:
         abort(400)
@@ -173,6 +180,9 @@ def datos_columna(estado):
 @login_required
 def stats():
     """Devuelve conteos rápidos para actualizar badges sin recargar."""
+    if not current_user.puede_ver_seleccion:
+        abort(403)
+
     vacante_id = request.args.get("vacante", type=int)
 
     base = db.session.query(Aplicacion.estado, func.count(Aplicacion.id))

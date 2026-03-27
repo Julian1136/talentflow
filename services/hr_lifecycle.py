@@ -15,6 +15,7 @@ from models import (
     EventoLaboral,
     MovimientoLaboral,
     Sede,
+    TareaOnboardingEmpleado,
 )
 
 
@@ -91,4 +92,15 @@ def asegurar_empleado_por_contratacion(aplicacion: Aplicacion, usuario_id: int) 
         usuario_id,
         {"id_aplicacion": aplicacion.id},
     )
+    for orden, titulo in enumerate(
+        [
+            "Firma de contrato y políticas",
+            "Alta en sistemas internos",
+            "Inducción RRHH",
+            "Entrega de equipo / accesos",
+        ]
+    ):
+        db.session.add(
+            TareaOnboardingEmpleado(id_empleado=empleado.id, titulo=titulo, orden=orden)
+        )
     return empleado

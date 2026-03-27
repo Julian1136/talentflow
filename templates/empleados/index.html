@@ -5,19 +5,55 @@
 {% block page_sub %}Gestión de empleados, movimientos y estado laboral{% endblock %}
 
 {% block content %}
-<div class="card mb-24">
-  <div class="flex justify-between items-center mb-16">
-    <div class="card-title" style="margin-bottom:0">Empleados</div>
-    <form method="get" class="flex gap-8 items-center">
-      <label class="text-sm text-muted">Estado</label>
-      <select name="estado" class="form-select" style="width:180px">
+
+{# ── Stats bar ── #}
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-icon indigo">🏢</div>
+    <div>
+      <div class="stat-card-v">{{ empleados|length }}</div>
+      <div class="stat-card-l">Total empleados</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">✅</div>
+    <div>
+      <div class="stat-card-v">{{ empleados|selectattr('estado_laboral','equalto','activo')|list|length }}</div>
+      <div class="stat-card-l">Activos</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon amber">⏸</div>
+    <div>
+      <div class="stat-card-v">{{ empleados|selectattr('estado_laboral','equalto','suspendido')|list|length }}</div>
+      <div class="stat-card-l">Suspendidos</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon red">🚪</div>
+    <div>
+      <div class="stat-card-v">{{ (empleados|selectattr('estado_laboral','equalto','retiro')|list|length) + (empleados|selectattr('estado_laboral','equalto','despedido')|list|length) }}</div>
+      <div class="stat-card-l">Desvinculados</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-header mb-16">
+    <div class="section-title">Nómina de empleados</div>
+    <form method="get" class="filter-row">
+      <label class="text-sm text-muted" style="font-weight:600;">Estado</label>
+      <select name="estado" class="form-select" style="width:170px;height:36px;padding:6px 10px;font-size:13px;">
         <option value="">Todos</option>
-        <option value="activo" {% if estado == 'activo' %}selected{% endif %}>Activo</option>
-        <option value="suspendido" {% if estado == 'suspendido' %}selected{% endif %}>Suspendido</option>
-        <option value="retiro" {% if estado == 'retiro' %}selected{% endif %}>Retiro</option>
-        <option value="despedido" {% if estado == 'despedido' %}selected{% endif %}>Despedido</option>
+        <option value="activo"    {% if estado == 'activo'    %}selected{% endif %}>✅ Activo</option>
+        <option value="suspendido"{% if estado == 'suspendido'%}selected{% endif %}>⏸ Suspendido</option>
+        <option value="retiro"    {% if estado == 'retiro'    %}selected{% endif %}>🚪 Retiro</option>
+        <option value="despedido" {% if estado == 'despedido' %}selected{% endif %}>❌ Despedido</option>
       </select>
-      <button class="btn btn-secondary">Filtrar</button>
+      <button class="btn btn-secondary btn-sm">Filtrar</button>
+      {% if estado %}
+      <a href="{{ url_for('empleados.index') }}" class="btn btn-secondary btn-sm">Limpiar</a>
+      {% endif %}
     </form>
   </div>
 
@@ -25,29 +61,55 @@
     <table>
       <thead>
         <tr>
+          <th>Empleado</th>
           <th>Cédula</th>
-          <th>Nombre</th>
           <th>Estado</th>
-          <th>Cargo actual</th>
+          <th>Cargo</th>
           <th>Sede</th>
           <th>Ingreso</th>
-          <th></th>
+          <th style="width:80px;"></th>
         </tr>
       </thead>
       <tbody>
       {% for e in empleados %}
         {% set actual = (e.asignaciones|selectattr('es_actual')|list|first) %}
         <tr>
-          <td class="font-mono">{{ e.cedula }}</td>
-          <td>{{ e.candidato.nombre_completo if e.candidato else e.cedula }}</td>
-          <td><span class="badge {% if e.estado_laboral == 'activo' %}badge-green{% elif e.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">{{ e.estado_laboral_legible }}</span></td>
-          <td>{{ actual.cargo.nombre if actual and actual.cargo else '—' }}</td>
-          <td>{{ actual.sede.nombre if actual and actual.sede else '—' }}</td>
-          <td>{{ e.fecha_ingreso.strftime('%Y-%m-%d') if e.fecha_ingreso else '—' }}</td>
-          <td class="text-right"><a class="btn btn-sm btn-primary" href="{{ url_for('empleados.detalle', emp_id=e.id) }}">Ver</a></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#4338ca,#7c3aed);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0;">
+                {% if e.candidato %}{{ e.candidato.nombre_completo[0] }}{% else %}?{% endif %}
+              </div>
+              <div>
+                <div style="font-weight:700;color:var(--text);font-size:13.5px;">
+                  {{ e.candidato.nombre_completo if e.candidato else e.cedula }}
+                </div>
+                {% if actual and actual.jefe %}
+                <div style="font-size:11px;color:var(--text3);">Jefe: {{ actual.jefe.nombre_completo }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td><span class="font-mono" style="font-size:12.5px;">{{ e.cedula }}</span></td>
+          <td>
+            <span class="badge {% if e.estado_laboral == 'activo' %}badge-green{% elif e.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">
+              {{ e.estado_laboral_legible }}
+            </span>
+          </td>
+          <td style="color:var(--text2);font-size:13px;">{{ actual.cargo.nombre if actual and actual.cargo else '—' }}</td>
+          <td style="color:var(--text2);font-size:13px;">{{ actual.sede.nombre if actual and actual.sede else '—' }}</td>
+          <td style="color:var(--text3);font-size:12.5px;">{{ e.fecha_ingreso.strftime('%Y-%m-%d') if e.fecha_ingreso else '—' }}</td>
+          <td>
+            <a class="btn btn-primary btn-xs" href="{{ url_for('empleados.detalle', emp_id=e.id) }}">Ver →</a>
+          </td>
         </tr>
       {% else %}
-        <tr><td colspan="7" class="text-muted">No hay empleados registrados todavía.</td></tr>
+        <tr>
+          <td colspan="7" style="text-align:center;padding:48px;color:var(--text3);">
+            <div style="font-size:32px;margin-bottom:10px;">👥</div>
+            <div style="font-size:14px;font-weight:600;">No hay empleados registrados</div>
+            <div style="font-size:12px;margin-top:4px;">Los empleados se crean al contratar candidatos desde las vacantes.</div>
+          </td>
+        </tr>
       {% endfor %}
       </tbody>
     </table>

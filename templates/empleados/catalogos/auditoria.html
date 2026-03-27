@@ -1,0 +1,110 @@
+{% extends "empleados/catalogos/layout.html" %}
+{% block catalog_title %}Auditoría — Catálogos HR{% endblock %}
+{% block catalog_h1 %}Auditoría{% endblock %}
+{% block catalog_subtitle %}Trazabilidad de altas, bajas y cambios en maestros HR{% endblock %}
+
+{% block catalog_hero %}
+<h2>Historial administrativo</h2>
+<p>Filtra por entidad, acción, responsable o rango de fechas. Exporta el resultado en CSV para revisión, cumplimiento o archivo.</p>
+{% endblock %}
+
+{% block catalog_body %}
+<div class="hr-cat-panel">
+  <div class="hr-cat-panel__hd" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h3>🔍 Filtros y exportación</h3>
+      <span>Resultados limitados a los 120 eventos más recientes según criterios</span>
+    </div>
+    <a class="btn btn-primary btn-sm"
+       href="{{ url_for('empleados.exportar_auditoria_catalogos', aud_entidad=aud_entidad, aud_accion=aud_accion, aud_usuario=aud_usuario, aud_desde=aud_desde, aud_hasta=aud_hasta) }}">
+      ⬇️ Descargar CSV
+    </a>
+  </div>
+
+  <div class="hr-cat-panel__bd">
+    <form method="get" action="{{ url_for('empleados.catalogos_auditoria') }}" class="form-grid mb-16">
+      <div class="form-group">
+        <label class="form-label">Entidad</label>
+        <select name="aud_entidad" class="form-select">
+          <option value="">Todas</option>
+          <option value="sede"                 {% if aud_entidad == 'sede'                 %}selected{% endif %}>🏢 Sede</option>
+          <option value="cargo"                {% if aud_entidad == 'cargo'                %}selected{% endif %}>📋 Cargo</option>
+          <option value="plantilla_desempeno"  {% if aud_entidad == 'plantilla_desempeno'  %}selected{% endif %}>📐 Plantilla desempeño</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Acción</label>
+        <select name="aud_accion" class="form-select">
+          <option value="">Todas</option>
+          <option value="crear"         {% if aud_accion == 'crear'         %}selected{% endif %}>➕ Crear</option>
+          <option value="editar"        {% if aud_accion == 'editar'        %}selected{% endif %}>✏️ Editar</option>
+          <option value="eliminar"      {% if aud_accion == 'eliminar'      %}selected{% endif %}>🗑 Eliminar</option>
+          <option value="toggle_estado" {% if aud_accion == 'toggle_estado' %}selected{% endif %}>🔄 Activar / Desactivar</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Usuario</label>
+        <input name="aud_usuario" class="form-input" value="{{ aud_usuario }}" placeholder="Nombre o correo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Desde</label>
+        <input type="date" name="aud_desde" class="form-input" value="{{ aud_desde }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hasta</label>
+        <input type="date" name="aud_hasta" class="form-input" value="{{ aud_hasta }}">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;">
+        <button type="submit" class="btn btn-secondary" style="width:100%;">Aplicar filtros</button>
+      </div>
+    </form>
+
+    {% if auditoria %}
+    <div style="margin-bottom:10px;font-size:12px;color:var(--text3);font-weight:600;">
+      {{ auditoria|length }} evento{{ 's' if auditoria|length != 1 else '' }} encontrado{{ 's' if auditoria|length != 1 else '' }}
+    </div>
+    <div class="hr-cat-table-wrap">
+      <table class="hr-cat-table">
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Entidad</th><th>Acción</th><th>Detalle</th><th>Usuario</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for a in auditoria %}
+          <tr>
+            <td class="font-mono" style="font-size:11.5px;white-space:nowrap;color:var(--text3);">
+              {{ a.fecha_evento.strftime('%Y-%m-%d %H:%M') if a.fecha_evento else '—' }}
+            </td>
+            <td>
+              <span style="font-weight:600;color:var(--text);font-size:13px;">{{ a.entidad }}</span>
+              {% if a.id_entidad %}
+              <span class="font-mono text-muted" style="font-size:11px;"> #{{ a.id_entidad }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge
+                {% if a.accion == 'crear' %}badge-green
+                {% elif a.accion == 'eliminar' %}badge-red
+                {% elif a.accion == 'toggle_estado' %}badge-amber
+                {% else %}badge-blue{% endif %}">
+                {{ a.accion }}
+              </span>
+            </td>
+            <td class="text-sm" style="max-width:340px;color:var(--text2);">{{ a.detalle or '—' }}</td>
+            <td style="font-size:12px;color:var(--text3);white-space:nowrap;">{{ a.usuario }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="hr-cat-empty">
+      <div style="font-size:36px;margin-bottom:10px;">🔍</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text2);">Sin eventos</div>
+      <div class="text-sm mt-12">Amplía el rango de fechas o quita algunos filtros para ver resultados.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

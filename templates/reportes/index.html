@@ -5,10 +5,24 @@
 {% block page_sub %}Generación de informes{% endblock %}
 
 {% block content %}
+<div class="grid-3" style="margin-bottom:1.25rem">
+  <div class="card">
+    <div class="card-title">Candidatos activos</div>
+    <p class="text-xl" style="font-weight:600;margin:0">{{ rep_kpis.candidatos_activos }}</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Vacantes abiertas</div>
+    <p class="text-xl" style="font-weight:600;margin:0">{{ rep_kpis.vacantes_abiertas }}</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Postulaciones (30 días)</div>
+    <p class="text-xl" style="font-weight:600;margin:0">{{ rep_kpis.postulaciones_30d }}</p>
+  </div>
+</div>
 <div class="grid-2">
   <div class="card">
     <div class="card-title">Exportar candidatos</div>
-    <p class="mb-16">Descarga todos los candidatos activos en formato CSV para análisis externo.</p>
+    <p class="mb-16">CSV con candidatos activos. Usa los mismos filtros que el listado: <code>?q=&estado=&ciudad=</code>.</p>
     <a href="{{ url_for('reportes.exportar_candidatos') }}" class="btn btn-primary">Exportar a CSV</a>
   </div>
   <div class="card">
@@ -27,6 +41,20 @@
     <button class="btn btn-secondary" id="btnHrMetrics">Consultar métricas</button>
     <pre id="hrMetricsOut" class="text-sm mt-12" style="white-space:pre-wrap"></pre>
   </div>
+  {% if current_user.es_rrhh or current_user.es_reclutador %}
+  <div class="card">
+    <div class="card-title">Integración ATS / externos</div>
+    <p class="mb-16">CSV con una fila por postulación (mapeo fijo de columnas). Opcional: <code>?lim=5000</code>.</p>
+    <a href="{{ url_for('reportes.exportar_integracion_ats') }}" class="btn btn-primary">Descargar export ATS</a>
+  </div>
+  {% endif %}
+  {% if current_user.es_rrhh %}
+  <div class="card">
+    <div class="card-title">Auditoría de selección</div>
+    <p class="mb-16">Historial de <code>historial_procesos</code> con exportación CSV.</p>
+    <a href="{{ url_for('reportes.auditoria_seleccion') }}" class="btn btn-primary">Ver auditoría</a>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 

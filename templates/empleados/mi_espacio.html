@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Mi espacio{% endblock %}
+{% block page_title %}Mi espacio laboral{% endblock %}
+{% block page_sub %}Resumen de tu información, pendientes y avance de onboarding{% endblock %}
+
+{% block content %}
+
+{# Hero #}
+<div class="space-hero mb-24">
+  <div class="space-hero-content">
+    <h2>¡Hola, {{ current_user.nombres }}! 👋</h2>
+    <p>Aquí encontrarás tu ficha laboral, evaluaciones pendientes y el estado de tu onboarding.</p>
+  </div>
+</div>
+
+<div class="grid-2 mb-24">
+  {# Tu ficha #}
+  <div class="card">
+    <div class="card-title">🪪 Tu ficha laboral</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Cédula</span>
+        <span class="font-mono" style="font-weight:600;">{{ empleado.cedula }}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Estado</span>
+        <span class="badge {% if empleado.estado_laboral == 'activo' %}badge-green{% elif empleado.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">
+          {{ empleado.estado_laboral_legible }}
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Fecha ingreso</span>
+        <span style="font-weight:600;">{{ empleado.fecha_ingreso.strftime('%d %b %Y') if empleado.fecha_ingreso else '—' }}</span>
+      </div>
+    </div>
+    <a href="{{ url_for('empleados.detalle', emp_id=empleado.id) }}" class="btn btn-secondary btn-sm mt-16" style="width:100%;justify-content:center;">
+      Ver expediente completo →
+    </a>
+  </div>
+
+  {# Evaluaciones pendientes #}
+  <div class="card">
+    <div class="section-header">
+      <div class="card-title" style="margin-bottom:0;">⭐ Evaluaciones pendientes</div>
+      {% if evals_pendientes %}
+      <span class="badge badge-amber">{{ evals_pendientes|length }} pendiente{{ 's' if evals_pendientes|length > 1 else '' }}</span>
+      {% endif %}
+    </div>
+    {% if evals_pendientes %}
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      {% for e in evals_pendientes %}
+      <a href="{{ url_for('empleados.detalle', emp_id=empleado.id) }}" style="text-decoration:none;">
+        <div style="padding:12px 14px;background:var(--amber-bg);border:1px solid #fde68a;border-radius:10px;cursor:pointer;transition:all .18s ease;" onmouseover="this.style.borderColor='var(--amber)'" onmouseout="this.style.borderColor='#fde68a'">
+          <div style="font-weight:700;color:var(--text);font-size:13.5px;">Periodo {{ e.periodo or '—' }}</div>
+          <div style="font-size:12px;color:var(--amber);margin-top:3px;">Puntaje: {{ e.puntaje_total or 0 }}% · Pendiente de tu aceptación</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:28px;color:var(--text3);">
+      <div style="font-size:32px;margin-bottom:8px;">✅</div>
+      <div style="font-size:13.5px;font-weight:600;color:var(--text2);">Al día</div>
+      <div class="text-sm mt-12">No tienes evaluaciones pendientes de aceptar.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# Onboarding #}
+{% if empleado.tareas_onboarding %}
+<div class="card">
+  {% set total    = empleado.tareas_onboarding|length %}
+  {% set hechas   = empleado.tareas_onboarding|selectattr('hecha')|list|length %}
+  {% set pct      = ((hechas / total) * 100)|int if total > 0 else 0 %}
+
+  <div class="section-header">
+    <div class="card-title" style="margin-bottom:0;">🚀 Tu onboarding</div>
+    <span style="font-family:'Outfit',sans-serif;font-size:22px;font-weight:800;color:{{ 'var(--green)' if pct == 100 else 'var(--accent)' }};">{{ pct }}%</span>
+  </div>
+
+  <div style="height:8px;background:var(--surface2);border-radius:4px;margin-bottom:20px;overflow:hidden;border:1px solid var(--border);">
+    <div style="height:100%;width:{{ pct }}%;background:linear-gradient(90deg,var(--accent),#7c3aed);border-radius:4px;transition:width .5s var(--ease-out);"></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;">
+    {% for t in empleado.tareas_onboarding|sort(attribute='orden') %}
+    <div class="onboarding-item">
+      <div class="onboarding-check {{ 'done' if t.hecha else 'pending' }}">
+        {{ '✓' if t.hecha else '' }}
+      </div>
+      <span style="{{ 'color:var(--text3);text-decoration:line-through;' if t.hecha else 'font-weight:500;' }}font-size:13.5px;">{{ t.titulo }}</span>
+      {% if t.hecha %}
+      <span class="badge badge-green" style="margin-left:auto;">Completado</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if pct < 100 %}
+  <p class="text-xs text-muted mt-16" style="text-align:center;">Para marcar tareas como completadas, contacta al área de RRHH.</p>
+  {% else %}
+  <div style="text-align:center;margin-top:16px;padding:14px;background:var(--green-bg);border-radius:10px;border:1px solid #bbf7d0;">
+    <span style="font-size:22px;">🎉</span>
+    <div style="font-weight:700;color:var(--green);margin-top:4px;">¡Onboarding completado!</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

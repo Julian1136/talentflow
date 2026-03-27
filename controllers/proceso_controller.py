@@ -16,6 +16,7 @@ from models import (
     EvaluacionPlantillaRespuesta,
     EvaluacionTecnica,
     HistorialProceso,
+    NotaInternaAplicacion,
     PlantillaEvaluacion,
     ESTADOS_APLICACION,
     Usuario,
@@ -50,6 +51,10 @@ def _registrar_historial(aplicacion, accion, estado_ant=None, estado_nuevo=None,
 @proceso_bp.route("/<int:app_id>")
 @login_required
 def detalle(app_id):
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para ver el proceso de selección.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     aplicacion = db.session.get(Aplicacion, app_id)
     if not aplicacion:
         abort(404)
@@ -67,6 +72,13 @@ def detalle(app_id):
         except (json.JSONDecodeError, TypeError):
             crit = []
         plantillas_data.append({"id": p.id, "nombre": p.nombre, "criterios": crit})
+    historial_proceso = sorted(
+        aplicacion.historial,
+        key=lambda h: (h.fecha_accion or datetime.min, h.id),
+        reverse=True,
+    )
+    notas_internas = list(aplicacion.notas_internas)
+
     return render_template(
         "proceso/detalle.html",
         aplicacion=aplicacion,
@@ -75,7 +87,34 @@ def detalle(app_id):
         now_local=now_local,
         plantillas_data=plantillas_data,
         puede_plantilla_eval=_puede_evaluacion_plantilla(),
+        historial_proceso=historial_proceso,
+        notas_internas=notas_internas,
     )
+
+
+@proceso_bp.route("/<int:app_id>/nota-interna", methods=["POST"])
+@login_required
+def agregar_nota_interna(app_id):
+    if not current_user.es_reclutador:
+        flash("Sin permisos para notas internas.", "danger")
+        return redirect(url_for("proceso.detalle", app_id=app_id))
+    aplicacion = db.session.get(Aplicacion, app_id)
+    if not aplicacion:
+        abort(404)
+    cuerpo = (request.form.get("cuerpo") or "").strip()
+    if not cuerpo:
+        flash("Escribe el contenido de la nota.", "warning")
+        return redirect(url_for("proceso.detalle", app_id=app_id))
+    db.session.add(
+        NotaInternaAplicacion(
+            id_aplicacion=aplicacion.id,
+            id_usuario=current_user.id,
+            cuerpo=cuerpo[:8000],
+        )
+    )
+    db.session.commit()
+    flash("Nota interna registrada.", "success")
+    return redirect(url_for("proceso.detalle", app_id=app_id))
 
 
 # ─── Cambiar estado ───────────────────────────────────────────────────────────
@@ -559,5 +598,7 @@ def compatibilidad_ia(app_id):
         habilidades=skills,
     )
     if ok:
+        aplicacion.analisis_ia_text = texto
+        db.session.commit()
         return jsonify({"ok": True, "texto": texto})
     return jsonify({"ok": False, "error": texto}), 200

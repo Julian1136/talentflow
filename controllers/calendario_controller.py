@@ -4,7 +4,7 @@ TalentFlow — Calendario de entrevistas (FullCalendar)
 
 from datetime import datetime, date
 
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import joinedload
@@ -101,6 +101,9 @@ def index():
 @calendario_bp.route("/eventos")
 @login_required
 def eventos():
+    if not current_user.puede_ver_seleccion:
+        return jsonify([]), 403
+
     start_dt = _parse_iso_dt(request.args.get("start"))
     end_dt = _parse_iso_dt(request.args.get("end"))
 

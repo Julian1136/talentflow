@@ -4,6 +4,7 @@ CRUD completo, carga de documentos y búsqueda avanzada.
 """
 
 import os
+import tempfile
 import uuid
 from datetime import datetime
 from flask import (
@@ -19,9 +20,16 @@ from flask import (
 )
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
+from sqlalchemy import exists
+
 from models import (
-    Candidato, HojaDeVida, Aplicacion, DocumentoAdjunto,
-    HistorialProceso, Vacante, ESTADOS_APLICACION
+    Candidato,
+    HojaDeVida,
+    Aplicacion,
+    DocumentoAdjunto,
+    HistorialProceso,
+    Vacante,
+    ESTADOS_APLICACION,
 )
 from extensions import db
 
@@ -39,9 +47,15 @@ def extension_permitida(filename):
 @candidatos_bp.route("/")
 @login_required
 def lista():
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para ver candidatos.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     q = request.args.get("q", "").strip()
     estado = request.args.get("estado", "")
     ciudad = request.args.get("ciudad", "")
+    page = max(1, request.args.get("page", default=1, type=int))
+    per_page = 15
 
     query = Candidato.query.filter_by(activo=True)
 
@@ -57,24 +71,92 @@ def lista():
         )
     if ciudad:
         query = query.filter(Candidato.ciudad.ilike(f"%{ciudad}%"))
-
-    candidatos = query.order_by(Candidato.fecha_registro.desc()).all()
-
-    # Filtrar por estado si se especifica
     if estado:
-        candidatos = [
-            c for c in candidatos
-            if any(a.estado == estado for a in c.aplicaciones)
-        ]
+        query = query.filter(
+            exists().where(
+                Aplicacion.cedula_candidato == Candidato.cedula,
+                Aplicacion.estado == estado,
+            )
+        )
+
+    pagination = query.order_by(Candidato.fecha_registro.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    for c in pagination.items:
+        apps = sorted(
+            c.aplicaciones,
+            key=lambda x: x.fecha_aplicacion or datetime.min,
+            reverse=True,
+        )
+        c._ultima_aplicacion = apps[0] if apps else None
 
     return render_template(
         "candidatos/lista.html",
-        candidatos=candidatos,
+        candidatos=pagination.items,
+        pagination=pagination,
         estados=ESTADOS_APLICACION,
         filtro_q=q,
         filtro_estado=estado,
         filtro_ciudad=ciudad,
     )
+
+
+@candidatos_bp.route("/bulk-estado", methods=["POST"])
+@login_required
+def bulk_estado_aplicaciones():
+    """Cambio de estado masivo para aplicaciones seleccionadas (última postulación en listado)."""
+    if not current_user.es_reclutador:
+        flash("Sin permisos para cambiar estados.", "danger")
+        return redirect(url_for("candidatos.lista"))
+
+    raw_ids = request.form.getlist("app_ids")
+    nuevo_estado = (request.form.get("nuevo_estado") or "").strip()
+    estados_validos = [e[0] for e in ESTADOS_APLICACION]
+    if not raw_ids or nuevo_estado not in estados_validos:
+        flash("Selecciona al menos una aplicación y un estado válido.", "warning")
+        return redirect(url_for("candidatos.lista"))
+
+    from services.hr_lifecycle import asegurar_empleado_por_contratacion
+
+    def _reg_hist(aplicacion, accion, estado_ant, estado_nuevo, obs=None):
+        h = HistorialProceso(
+            cedula_candidato=aplicacion.cedula_candidato,
+            id_aplicacion=aplicacion.id,
+            id_usuario=current_user.id,
+            accion=accion,
+            estado_anterior=estado_ant,
+            estado_nuevo=estado_nuevo,
+            observaciones=obs,
+        )
+        db.session.add(h)
+
+    n = 0
+    for sid in raw_ids:
+        try:
+            aid = int(sid)
+        except (TypeError, ValueError):
+            continue
+        aplicacion = db.session.get(Aplicacion, aid)
+        if not aplicacion:
+            continue
+        estado_ant = aplicacion.estado
+        if estado_ant == nuevo_estado:
+            continue
+        aplicacion.estado = nuevo_estado
+        _reg_hist(
+            aplicacion,
+            f"Cambio masivo de estado: {estado_ant} → {nuevo_estado}",
+            estado_ant,
+            nuevo_estado,
+            request.form.get("observaciones", "")[:500],
+        )
+        if nuevo_estado == "contratado" and estado_ant != "contratado":
+            asegurar_empleado_por_contratacion(aplicacion, current_user.id)
+        n += 1
+    db.session.commit()
+
+    flash(f"Actualizadas {n} aplicación(es).", "success" if n else "info")
+    return redirect(url_for("candidatos.lista"))
 
 
 # ─── Crear candidato ──────────────────────────────────────────────────────────
@@ -145,6 +227,10 @@ def nuevo():
 @candidatos_bp.route("/<cedula>")
 @login_required
 def detalle(cedula):
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para ver candidatos.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     candidato = Candidato.query.get_or_404(cedula)
     vacantes = Vacante.query.filter_by(estado="abierta").all()
     return render_template(
@@ -158,6 +244,10 @@ def detalle(cedula):
 @candidatos_bp.route("/<cedula>/expediente")
 @login_required
 def expediente(cedula):
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para ver expedientes.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     candidato = Candidato.query.get_or_404(cedula)
     documentos = sorted(
         candidato.documentos,
@@ -212,6 +302,10 @@ def editar(cedula):
 @candidatos_bp.route("/<cedula>/documentos", methods=["POST"])
 @login_required
 def subir_documento(cedula):
+    if not current_user.es_reclutador:
+        flash("Sin permisos.", "danger")
+        return redirect(url_for("candidatos.detalle", cedula=cedula))
+
     candidato = Candidato.query.get_or_404(cedula)
     archivo = request.files.get("archivo")
     tipo = request.form.get("tipo_documento", "documento")
@@ -228,6 +322,44 @@ def subir_documento(cedula):
     _guardar_documento(archivo, cedula, tipo, id_aplicacion)
     flash("Documento cargado exitosamente.", "success")
     return redirect(url_for("candidatos.detalle", cedula=cedula))
+
+
+@candidatos_bp.route("/<cedula>/sugerir-desde-cv", methods=["POST"])
+@login_required
+def sugerir_desde_cv(cedula):
+    if not current_user.es_reclutador:
+        flash("Sin permisos.", "danger")
+        return redirect(url_for("candidatos.detalle", cedula=cedula))
+    candidato = Candidato.query.get_or_404(cedula)
+    archivo = request.files.get("archivo_cv")
+    if not archivo or not archivo.filename:
+        flash("Selecciona un archivo PDF.", "warning")
+        return redirect(url_for("candidatos.detalle", cedula=cedula))
+    if not archivo.filename.lower().endswith(".pdf"):
+        flash("Por ahora solo se analizan PDF.", "warning")
+        return redirect(url_for("candidatos.detalle", cedula=cedula))
+    fd, tmp = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    try:
+        archivo.save(tmp)
+        from services.cv_parser import extract_text_from_pdf, suggest_fields_from_text
+
+        text = extract_text_from_pdf(tmp)
+        sug = suggest_fields_from_text(text)
+        correos = ", ".join(sug.get("correos") or []) or "—"
+        tels = ", ".join(sug.get("telefonos") or []) or "—"
+        frag = (sug.get("fragmento") or "")[:400].replace("\n", " ")
+        flash(
+            f"Extracción CV (revísalo antes de guardar): correos [{correos}] · "
+            f"tel [{tels}] · extracto: {frag}",
+            "info",
+        )
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    return redirect(url_for("candidatos.editar", cedula=cedula))
 
 
 def _guardar_documento(archivo, cedula, tipo, id_aplicacion):
@@ -258,6 +390,9 @@ def _guardar_documento(archivo, cedula, tipo, id_aplicacion):
 @candidatos_bp.route("/documentos/<int:doc_id>/descargar")
 @login_required
 def descargar_documento(doc_id):
+    if not current_user.puede_ver_seleccion:
+        abort(403)
+
     doc = db.session.get(DocumentoAdjunto, doc_id)
     if not doc:
         abort(404)

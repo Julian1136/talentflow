@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
-from extensions import db
+from extensions import db, limiter
 from models import Aplicacion, Candidato, HojaDeVida, HistorialProceso, Rol, Usuario, Vacante
 from services.scoring import calcular_score_aplicacion
 
@@ -21,6 +21,7 @@ def vacante_publica(vid: int):
 
 
 @publico_bp.route("/vacante/<int:vid>/postular", methods=["POST"])
+@limiter.limit("30 per minute", methods=["POST"])
 def postular(vid: int):
     vac = db.session.get(Vacante, vid)
     if not vac or vac.estado != "abierta":

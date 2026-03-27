@@ -47,6 +47,14 @@
   <div class="card">
     <div class="card-title">Documentos adjuntos</div>
     {% if current_user.es_reclutador %}
+    <form method="POST" action="{{ url_for('candidatos.sugerir_desde_cv', cedula=candidato.cedula) }}" enctype="multipart/form-data" class="mb-16" style="padding:12px;background:var(--surface2);border-radius:8px;border:1px dashed var(--border);">
+      <div class="text-sm font-medium mb-8">Sugerir datos desde CV (PDF)</div>
+      <div class="flex gap-8 items-center flex-wrap">
+        <input type="file" name="archivo_cv" accept=".pdf,application/pdf" class="form-input" style="flex:1;min-width:200px;">
+        <button type="submit" class="btn btn-secondary btn-sm">Analizar y ir a editar</button>
+      </div>
+      <p class="text-xs text-muted mt-8">Heurística local; no sustituye la revisión humana.</p>
+    </form>
     <form method="POST" action="{{ url_for('candidatos.subir_documento', cedula=candidato.cedula) }}" enctype="multipart/form-data" class="mb-16">
       <div class="flex gap-8 items-center">
         <select name="tipo_documento" class="form-select" style="flex:1;">
@@ -64,6 +72,9 @@
       <li class="flex justify-between items-center py-2 border-bottom">
         <span>{{ doc.nombre_original }} <span class="text-xs text-muted">({{ doc.tipo_documento }})</span></span>
         <a href="{{ url_for('candidatos.descargar_documento', doc_id=doc.id) }}" class="btn btn-secondary btn-xs">Descargar</a>
+        {% if doc.nombre_original and doc.nombre_original.lower().endswith('.pdf') %}
+        <a href="{{ url_for('candidatos.descargar_documento', doc_id=doc.id) }}" target="_blank" rel="noopener" class="btn btn-secondary btn-xs">Vista previa</a>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>

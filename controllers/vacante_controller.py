@@ -1,6 +1,8 @@
 """
 TalentFlow — Controlador de Vacantes
 """
+from sqlalchemy import func
+
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from models import Vacante, Aplicacion, ESTADOS_APLICACION
@@ -12,12 +14,52 @@ vacantes_bp = Blueprint("vacantes", __name__, url_prefix="/vacantes")
 @vacantes_bp.route("/")
 @login_required
 def lista():
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para ver vacantes.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     estado = request.args.get("estado", "")
+    q = (request.args.get("q") or "").strip()
+    page = max(1, request.args.get("page", default=1, type=int))
+    per_page = 12
+
     query = Vacante.query
     if estado:
         query = query.filter_by(estado=estado)
-    vacantes = query.order_by(Vacante.fecha_creacion.desc()).all()
-    return render_template("vacantes/lista.html", vacantes=vacantes, filtro_estado=estado)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            db.or_(
+                Vacante.titulo.ilike(like),
+                Vacante.area.ilike(like),
+                Vacante.ciudad.ilike(like),
+            )
+        )
+
+    pagination = query.order_by(Vacante.fecha_creacion.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    ids = [v.id for v in pagination.items]
+    counts = {}
+    if ids:
+        rows = (
+            db.session.query(Aplicacion.id_vacante, func.count(Aplicacion.id))
+            .filter(Aplicacion.id_vacante.in_(ids))
+            .group_by(Aplicacion.id_vacante)
+            .all()
+        )
+        counts = {vid: int(c) for vid, c in rows}
+    for v in pagination.items:
+        # conteo agregado en lista (evita N+1); no usar propiedad en el modelo
+        v.postulaciones_count = counts.get(v.id, 0)
+
+    return render_template(
+        "vacantes/lista.html",
+        vacantes=pagination.items,
+        pagination=pagination,
+        filtro_estado=estado,
+        filtro_q=q,
+    )
 
 
 @vacantes_bp.route("/nueva", methods=["GET", "POST"])
@@ -55,6 +97,10 @@ def nueva():
 @vacantes_bp.route("/<int:vid>")
 @login_required
 def detalle(vid):
+    if not current_user.puede_ver_seleccion:
+        flash("No tiene permisos para ver vacantes.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     vacante = Vacante.query.get_or_404(vid)
     return render_template("vacantes/detalle.html", vacante=vacante, estados=ESTADOS_APLICACION)
 

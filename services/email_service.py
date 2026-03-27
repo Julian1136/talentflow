@@ -97,7 +97,39 @@ def _render_email(subtitulo: str, cuerpo: str) -> str:
     return render_template_string(_BASE_EMAIL, subtitulo=subtitulo, cuerpo=cuerpo)
 
 
-def _enviar(destinatario: str, asunto: str, html: str, silencioso: bool = True) -> bool:
+def _encolar_reintento(destinatario: str, asunto: str, html: str, error: str) -> None:
+    """Persiste un correo fallido para reintento por el scheduler."""
+    try:
+        from extensions import db
+        from models import CorreoColaReintento
+
+        row = CorreoColaReintento(
+            destinatario=(destinatario or "")[:255],
+            asunto=(asunto or "")[:500],
+            cuerpo_html=html or "",
+            intentos=0,
+            ultimo_error=(error or "")[:2000],
+            proximo_intento_en=datetime.utcnow(),
+        )
+        db.session.add(row)
+        db.session.commit()
+    except Exception as exc:
+        current_app.logger.warning("[EMAIL] No se pudo encolar reintento: %s", exc)
+        try:
+            from extensions import db
+
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _enviar(
+    destinatario: str,
+    asunto: str,
+    html: str,
+    silencioso: bool = True,
+    encolar_reintento_si_falla: bool = True,
+) -> bool:
     """Envía el correo. Si silencioso=True, atrapa excepciones sin propagar."""
     try:
         if not destinatario or "@" not in destinatario:
@@ -113,9 +145,22 @@ def _enviar(destinatario: str, asunto: str, html: str, silencioso: bool = True) 
         return True
     except Exception as exc:
         current_app.logger.error(f"[EMAIL] Error al enviar a {destinatario}: {exc}")
+        if encolar_reintento_si_falla and silencioso:
+            _encolar_reintento(destinatario, asunto, html, str(exc))
         if not silencioso:
             raise
         return False
+
+
+def reenviar_desde_cola(row) -> bool:
+    """Reintenta un registro de CorreoColaReintento (sin volver a encolar al fallar)."""
+    return _enviar(
+        row.destinatario,
+        row.asunto,
+        row.cuerpo_html,
+        silencioso=True,
+        encolar_reintento_si_falla=False,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -413,6 +458,39 @@ def notificar_nuevo_candidato_a_reclutador(aplicacion, reclutador_correo: str) -
     return _enviar(
         destinatario=reclutador_correo,
         asunto=f"[TalentFlow] Nueva aplicación: {candidato.nombre_completo} → {vacante.titulo}",
+        html=html,
+    )
+
+
+def notificar_recordatorio_entrevista_24h(entrevista) -> bool:
+    """Recordatorio al candidato ~24 h antes (invocado desde el scheduler)."""
+    if not getattr(entrevista, "fecha_programada", None):
+        return False
+    ap = entrevista.aplicacion
+    if not ap:
+        return False
+    candidato = ap.candidato
+    vacante = ap.vacante
+    if not candidato or not candidato.correo:
+        return False
+    if getattr(entrevista, "resultado", "") != "pendiente":
+        return False
+
+    fecha_fmt = entrevista.fecha_programada.strftime("%A %d de %B de %Y, %H:%M")
+    lugar_fmt = entrevista.lugar or "—"
+    cuerpo = f"""
+      <p>Hola <strong>{candidato.nombres}</strong>,</p>
+      <p>Te recordamos que mañana tienes entrevista para <strong>{vacante.titulo}</strong>.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="info-label">Fecha</span><span class="info-val">{fecha_fmt}</span></div>
+        <div class="info-row"><span class="info-label">Lugar</span><span class="info-val">{lugar_fmt}</span></div>
+      </div>
+      <p>¡Te deseamos mucho éxito!</p>
+    """
+    html = _render_email(subtitulo="Recordatorio de entrevista", cuerpo=cuerpo)
+    return _enviar(
+        destinatario=candidato.correo,
+        asunto=f"[TalentFlow] Recordatorio: entrevista · {vacante.titulo}",
         html=html,
     )
 

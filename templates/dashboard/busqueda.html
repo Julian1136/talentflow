@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Búsqueda{% endblock %}
+{% block page_title %}Resultados de búsqueda{% endblock %}
+{% block page_sub %}Consulta global para candidatos, empleados y vacantes{% endblock %}
+
+{% block content %}
+<div class="card mb-24">
+  <div class="card-title">Resultados para "{{ q }}"</div>
+  <p class="text-sm text-muted">Explora coincidencias en los módulos principales.</p>
+</div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-title">Candidatos</div>
+    <div class="timeline">
+      {% for c in candidatos %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title"><a href="{{ url_for('candidatos.detalle', cedula=c.cedula) }}" style="text-decoration:none;color:inherit;">{{ c.nombre_completo }}</a></div>
+          <div class="timeline-meta">{{ c.cedula }} · {{ c.correo or 'sin correo' }}</div>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-muted">Sin coincidencias.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Empleados</div>
+    <div class="timeline">
+      {% for e in empleados %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title"><a href="{{ url_for('empleados.detalle', emp_id=e.id) }}" style="text-decoration:none;color:inherit;">{{ e.candidato.nombre_completo if e.candidato else e.cedula }}</a></div>
+          <div class="timeline-meta">{{ e.cedula }} · {{ e.estado_laboral_legible }}</div>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-muted">Sin coincidencias.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Vacantes</div>
+    <div class="timeline">
+      {% for v in vacantes %}
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="timeline-title"><a href="{{ url_for('vacantes.detalle', vid=v.id) }}" style="text-decoration:none;color:inherit;">{{ v.titulo }}</a></div>
+          <div class="timeline-meta">{{ v.area or '—' }} · {{ v.ciudad or '—' }} · {{ v.estado }}</div>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-muted">Sin coincidencias.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

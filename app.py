@@ -19,8 +19,9 @@ from config import (
     env_bool,
 )
 from flask import Flask
+from flask_login import current_user
 from sqlalchemy.engine.url import URL
-from extensions import db, login_manager
+from extensions import db, login_manager, csrf, limiter
 
 load_env_file()
 
@@ -74,6 +75,8 @@ def create_app():
     # ── Extensiones ────────────────────────────────────────────────
     db.init_app(app)
     login_manager.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Inicia sesión para acceder a TalentFlow."
     login_manager.login_message_category = "warning"
@@ -125,6 +128,93 @@ def create_app():
         except Exception:
             # Permite arrancar aunque aún no se aplique 06_hr_lifecycle.sql
             return {}
+
+    @app.context_processor
+    def inject_quick_notifications():
+        if not current_user.is_authenticated:
+            return {}
+        try:
+            from models import Aplicacion, Entrevista, EvaluacionDesempeno
+            from datetime import datetime, timedelta
+
+            now = datetime.utcnow()
+            soon = now + timedelta(hours=48)
+            entrevistas = (
+                Entrevista.query.join(Aplicacion, Aplicacion.id == Entrevista.id_aplicacion)
+                .filter(
+                    Entrevista.resultado == "pendiente",
+                    Entrevista.fecha_programada.isnot(None),
+                    Entrevista.fecha_programada >= now,
+                    Entrevista.fecha_programada <= soon,
+                )
+                .order_by(Entrevista.fecha_programada.asc())
+                .limit(6)
+                .all()
+            )
+            evals_pend = (
+                EvaluacionDesempeno.query.filter_by(estado_aceptacion="pendiente_empleado")
+                .order_by(EvaluacionDesempeno.fecha_registro.desc())
+                .limit(6)
+                .all()
+            )
+
+            items = []
+            for e in entrevistas:
+                candidato = e.aplicacion.candidato.nombre_completo if e.aplicacion and e.aplicacion.candidato else "Candidato"
+                fecha = e.fecha_programada.strftime("%d/%m %H:%M") if e.fecha_programada else "—"
+                notif_key = f"entrevista:{e.id}"
+                items.append(
+                    {
+                        "key": notif_key,
+                        "tipo": "entrevista",
+                        "texto": f"Entrevista próxima: {candidato} ({fecha})",
+                        "url": url_for("proceso.detalle", app_id=e.id_aplicacion),
+                    }
+                )
+            for ev in evals_pend:
+                nombre = ev.empleado.candidato.nombre_completo if ev.empleado and ev.empleado.candidato else ev.id_empleado
+                notif_key = f"evaluacion:{ev.id}"
+                items.append(
+                    {
+                        "key": notif_key,
+                        "tipo": "desempeno",
+                        "texto": f"Evaluación pendiente de aceptación: {nombre}",
+                        "url": url_for("empleados.detalle", emp_id=ev.id_empleado),
+                    }
+                )
+            try:
+                from services.notifications_store import was_seen
+
+                items = [x for x in items if not was_seen(current_user.id, x.get("key", ""))]
+            except Exception:
+                pass
+            try:
+                from services.sla_notifications import collect_sla_notification_items
+                from services.notifications_store import was_seen as _was_seen_sla
+
+                for s in collect_sla_notification_items(limit=8):
+                    if not _was_seen_sla(current_user.id, s.get("key", "")):
+                        items.append(s)
+            except Exception:
+                pass
+
+            items = items[:14]
+            by_type = {"entrevista": 0, "desempeno": 0, "sla": 0}
+            for it in items:
+                t = it.get("tipo")
+                if t in by_type:
+                    by_type[t] += 1
+            return {
+                "quick_notifications": items,
+                "quick_notifications_count": len(items),
+                "quick_notifications_by_type": by_type,
+            }
+        except Exception:
+            return {
+                "quick_notifications": [],
+                "quick_notifications_count": 0,
+                "quick_notifications_by_type": {"entrevista": 0, "desempeno": 0, "sla": 0},
+            }
 
     log_config_warnings(app.logger)
 

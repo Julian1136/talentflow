@@ -6,22 +6,84 @@
 
 {% block content %}
 {% set actual = (empleado.asignaciones|selectattr('es_actual')|list|first) %}
+
+{# ── Employee Hero Header ── #}
+<div class="emp-header mb-24">
+  <div class="emp-avatar">
+    {% if empleado.candidato %}{{ empleado.candidato.nombre_completo[0] }}{% else %}?{% endif %}
+  </div>
+  <div class="emp-meta">
+    <div class="emp-name">{{ empleado.candidato.nombre_completo if empleado.candidato else empleado.cedula }}</div>
+    <div class="emp-sub">
+      <span class="font-mono" style="font-size:12px;color:var(--text3);">{{ empleado.cedula }}</span>
+      &nbsp;·&nbsp;
+      <span class="badge {% if empleado.estado_laboral == 'activo' %}badge-green{% elif empleado.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">
+        {{ empleado.estado_laboral_legible }}
+      </span>
+      {% if empleado.fecha_ingreso %}
+      &nbsp;·&nbsp;
+      <span style="font-size:12px;color:var(--text3);">Desde {{ empleado.fecha_ingreso.strftime('%d %b %Y') }}</span>
+      {% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0;">
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ actual.cargo.nombre[:12] ~ '…' if actual and actual.cargo and actual.cargo.nombre|length > 12 else (actual.cargo.nombre if actual and actual.cargo else '—') }}</div>
+      <div class="stat-chip-l">Cargo</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ actual.sede.nombre[:10] ~ '…' if actual and actual.sede and actual.sede.nombre|length > 10 else (actual.sede.nombre if actual and actual.sede else '—') }}</div>
+      <div class="stat-chip-l">Sede</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ empleado.evaluaciones_desempeno|length }}</div>
+      <div class="stat-chip-l">Evaluaciones</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-v">{{ empleado.movimientos|length }}</div>
+      <div class="stat-chip-l">Movimientos</div>
+    </div>
+  </div>
+</div>
+
+{# ── Ficha + Movimiento ── #}
 <div class="grid-2 mb-24">
+  {# Ficha laboral #}
   <div class="card">
-    <div class="card-title">Ficha laboral</div>
-    <div class="text-sm">
-      <p><strong>Cédula:</strong> <span class="font-mono">{{ empleado.cedula }}</span></p>
-      <p><strong>Estado:</strong> <span class="badge {% if empleado.estado_laboral == 'activo' %}badge-green{% elif empleado.estado_laboral in ('retiro','despedido') %}badge-red{% else %}badge-amber{% endif %}">{{ empleado.estado_laboral_legible }}</span></p>
-      <p><strong>Cargo actual:</strong> {{ actual.cargo.nombre if actual and actual.cargo else '—' }}</p>
-      <p><strong>Sede actual:</strong> {{ actual.sede.nombre if actual and actual.sede else '—' }}</p>
-      <p><strong>Jefe actual:</strong> {{ actual.jefe.nombre_completo if actual and actual.jefe else '—' }}</p>
-      <p><strong>Ingreso:</strong> {{ empleado.fecha_ingreso.strftime('%Y-%m-%d') if empleado.fecha_ingreso else '—' }}</p>
-      {% if empleado.fecha_salida %}<p><strong>Salida:</strong> {{ empleado.fecha_salida.strftime('%Y-%m-%d') }}</p>{% endif %}
+    <div class="card-title">📋 Ficha laboral</div>
+    <div class="text-sm" style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Cédula</span>
+        <span class="font-mono" style="font-weight:600;">{{ empleado.cedula }}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Cargo actual</span>
+        <span style="font-weight:600;color:var(--text);">{{ actual.cargo.nombre if actual and actual.cargo else '—' }}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Sede</span>
+        <span style="font-weight:600;color:var(--text);">{{ actual.sede.nombre if actual and actual.sede else '—' }}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Jefe directo</span>
+        <span style="font-weight:600;color:var(--text);">{{ actual.jefe.nombre_completo if actual and actual.jefe else '—' }}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <span style="color:var(--text3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Fecha ingreso</span>
+        <span style="font-weight:600;color:var(--text);">{{ empleado.fecha_ingreso.strftime('%d %b %Y') if empleado.fecha_ingreso else '—' }}</span>
+      </div>
+      {% if empleado.fecha_salida %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">
+        <span style="color:#991b1b;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Fecha salida</span>
+        <span style="font-weight:600;color:#991b1b;">{{ empleado.fecha_salida.strftime('%d %b %Y') }}</span>
+      </div>
+      {% endif %}
     </div>
   </div>
 
+  {# Registrar movimiento #}
   <div class="card">
-    <div class="card-title">Registrar movimiento (ascenso/traslado)</div>
+    <div class="card-title">🔄 Registrar movimiento</div>
     <form method="post" action="{{ url_for('empleados.registrar_movimiento', emp_id=empleado.id) }}" class="form-grid">
       <div class="form-group">
         <label class="form-label">Tipo</label>
@@ -32,40 +94,75 @@
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Fecha</label>
+        <label class="form-label">Fecha efectiva</label>
         <input type="date" name="fecha_movimiento" class="form-input">
       </div>
       <div class="form-group">
-        <label class="form-label">Cargo</label>
+        <label class="form-label">Nuevo cargo</label>
         <select name="id_cargo" class="form-select" required>
           {% for c in cargos %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Sede</label>
+        <label class="form-label">Nueva sede</label>
         <select name="id_sede" class="form-select" required>
           {% for s in sedes %}<option value="{{ s.id }}">{{ s.nombre }}</option>{% endfor %}
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Jefe</label>
+      <div class="form-group form-full">
+        <label class="form-label">Jefe asignado</label>
         <select name="id_jefe" class="form-select">
-          <option value="">—</option>
+          <option value="">— Sin jefe asignado —</option>
           {% for u in jefes %}<option value="{{ u.id }}">{{ u.nombre_completo }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group form-full">
-        <label class="form-label">Motivo</label>
-        <textarea name="motivo" class="form-textarea"></textarea>
+        <label class="form-label">Motivo / observación</label>
+        <textarea name="motivo" class="form-textarea" rows="2" placeholder="Descripción del movimiento..."></textarea>
       </div>
-      <div class="form-full"><button class="btn btn-primary">Guardar movimiento</button></div>
+      <div class="form-full">
+        <button class="btn btn-primary" style="width:100%;">💾 Guardar movimiento</button>
+      </div>
     </form>
   </div>
 </div>
 
+{# ── Onboarding ── #}
+{% if empleado.tareas_onboarding %}
+<div class="card mb-24">
+  <div class="section-header">
+    <div class="card-title" style="margin-bottom:0;">🚀 Onboarding</div>
+    <span class="text-sm text-muted">
+      {{ empleado.tareas_onboarding|selectattr('hecha')|list|length }} / {{ empleado.tareas_onboarding|length }} completadas
+    </span>
+  </div>
+  {# Progress bar #}
+  {% set pct = ((empleado.tareas_onboarding|selectattr('hecha')|list|length) / (empleado.tareas_onboarding|length) * 100)|int %}
+  <div style="height:6px;background:var(--surface2);border-radius:3px;margin-bottom:16px;overflow:hidden;">
+    <div style="height:100%;width:{{ pct }}%;background:linear-gradient(90deg,var(--accent),#7c3aed);border-radius:3px;transition:width .4s ease;"></div>
+  </div>
+
+  {% for t in empleado.tareas_onboarding %}
+  <div class="onboarding-item">
+    <div class="onboarding-check {{ 'done' if t.hecha else 'pending' }}">
+      {{ '✓' if t.hecha else '○' }}
+    </div>
+    <span style="flex:1;{{ 'color:var(--text3);text-decoration:line-through;' if t.hecha else '' }}font-size:13.5px;">{{ t.titulo }}</span>
+    {% if current_user.es_rrhh %}
+    <form method="post" action="{{ url_for('empleados.toggle_onboarding_tarea', emp_id=empleado.id, tid=t.id) }}" style="display:inline;">
+      <button type="submit" class="btn btn-secondary btn-xs">{{ 'Desmarcar' if t.hecha else 'Marcar ✓' }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Evaluación + Disciplina / Salida ── #}
 <div class="grid-2 mb-24">
+  {# Evaluación #}
   <div class="card">
-    <div class="card-title">Evaluación de desempeño</div>
+    <div class="card-title">⭐ Evaluación de desempeño</div>
     <form method="post" action="{{ url_for('empleados.registrar_evaluacion', emp_id=empleado.id) }}" class="form-grid">
       <div class="form-group form-full">
         <label class="form-label">Plantilla</label>
@@ -86,83 +183,124 @@
       <div id="criteriosBox" class="form-full"></div>
       <div class="form-group form-full">
         <label class="form-label">Comentario del jefe</label>
-        <textarea name="comentario_jefe" class="form-textarea"></textarea>
+        <textarea name="comentario_jefe" class="form-textarea" rows="2" placeholder="Observaciones generales..."></textarea>
       </div>
-      <div class="form-full"><button class="btn btn-primary">Registrar evaluación</button></div>
+      <div class="form-full"><button class="btn btn-primary" style="width:100%;">📝 Registrar evaluación</button></div>
     </form>
   </div>
 
+  {# Disciplina + Salida #}
   <div class="card">
-    <div class="card-title">Disciplina y salida</div>
+    <div class="card-title">⚠️ Disciplina</div>
     <form method="post" action="{{ url_for('empleados.registrar_disciplina', emp_id=empleado.id) }}" class="form-grid mb-24">
-      <div class="form-group"><label class="form-label">Tipo falta</label><input name="tipo" class="form-input" required></div>
-      <div class="form-group"><label class="form-label">Severidad</label><input name="severidad" class="form-input" placeholder="leve, grave"></div>
-      <div class="form-group"><label class="form-label">Fecha falta</label><input type="date" name="fecha_falta" class="form-input"></div>
-      <div class="form-group"><label class="form-label">Estado</label><input name="estado" class="form-input" value="registrada"></div>
-      <div class="form-group form-full"><label class="form-label">Descripción</label><textarea name="descripcion" class="form-textarea" required></textarea></div>
-      <div class="form-group form-full"><label class="form-label">Sanción</label><textarea name="sancion" class="form-textarea"></textarea></div>
-      <div class="form-full"><button class="btn btn-amber btn-secondary">Registrar novedad</button></div>
-    </form>
-
-    <form method="post" action="{{ url_for('empleados.desvincular', emp_id=empleado.id) }}" class="form-grid">
-      <div class="form-group">
-        <label class="form-label">Tipo de salida</label>
-        <select name="tipo" class="form-select" required>
-          <option value="retiro_voluntario">Retiro voluntario</option>
-          <option value="despido">Despido</option>
-          <option value="fin_contrato">Fin de contrato</option>
+      <div class="form-group"><label class="form-label">Tipo falta</label><input name="tipo" class="form-input" required placeholder="Ej: tardanza, incumplimiento"></div>
+      <div class="form-group"><label class="form-label">Severidad</label>
+        <select name="severidad" class="form-select">
+          <option value="">Seleccionar…</option>
+          <option value="leve">Leve</option>
+          <option value="moderada">Moderada</option>
+          <option value="grave">Grave</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Fecha efectiva</label><input type="date" name="fecha_efectiva" class="form-input" required></div>
-      <div class="form-group form-full"><label class="form-label">Causa</label><textarea name="causa" class="form-textarea"></textarea></div>
-      <div class="form-group form-full"><label class="form-label">Documento</label><input name="documento_ref" class="form-input" placeholder="acta_123.pdf"></div>
-      <div class="form-full"><button class="btn btn-danger">Registrar salida</button></div>
+      <div class="form-group"><label class="form-label">Fecha falta</label><input type="date" name="fecha_falta" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Estado</label>
+        <select name="estado" class="form-select">
+          <option value="registrada">Registrada</option>
+          <option value="en_proceso">En proceso</option>
+          <option value="resuelta">Resuelta</option>
+        </select>
+      </div>
+      <div class="form-group form-full"><label class="form-label">Descripción</label><textarea name="descripcion" class="form-textarea" rows="2" required placeholder="Descripción detallada de la falta..."></textarea></div>
+      <div class="form-group form-full"><label class="form-label">Sanción aplicada</label><textarea name="sancion" class="form-textarea" rows="2" placeholder="Medida disciplinaria tomada..."></textarea></div>
+      <div class="form-full"><button class="btn btn-amber" style="width:100%;">⚠️ Registrar novedad</button></div>
     </form>
+
+    <div style="border-top:2px dashed var(--border);padding-top:18px;margin-top:4px;">
+      <div class="card-title" style="color:var(--red);">🚪 Desvinculación</div>
+      <form method="post" action="{{ url_for('empleados.desvincular', emp_id=empleado.id) }}" class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tipo de salida</label>
+          <select name="tipo" class="form-select" required>
+            <option value="retiro_voluntario">Retiro voluntario</option>
+            <option value="despido">Despido</option>
+            <option value="fin_contrato">Fin de contrato</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Fecha efectiva</label><input type="date" name="fecha_efectiva" class="form-input" required></div>
+        <div class="form-group form-full"><label class="form-label">Causa / descripción</label><textarea name="causa" class="form-textarea" rows="2" placeholder="Motivo de la desvinculación..."></textarea></div>
+        <div class="form-group form-full"><label class="form-label">Documento de referencia</label><input name="documento_ref" class="form-input" placeholder="acta_123.pdf"></div>
+        <div class="form-full">
+          <button class="btn btn-danger" style="width:100%;" onclick="return confirm('¿Confirmar desvinculación del empleado?')">🚪 Registrar salida</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
+{# ── Timelines ── #}
 <div class="grid-2">
   <div class="card">
-    <div class="card-title">Movimientos laborales</div>
+    <div class="card-title">📌 Historial de movimientos</div>
     <div class="timeline">
     {% for m in empleado.movimientos|sort(attribute='fecha_movimiento', reverse=true) %}
       <div class="timeline-item">
         <div class="timeline-dot"></div>
         <div class="timeline-content">
           <div class="timeline-title">{{ m.tipo|replace('_',' ')|title }}</div>
-          <div class="timeline-meta">{{ m.fecha_movimiento.strftime('%Y-%m-%d') if m.fecha_movimiento else '—' }} · {{ m.motivo or 'Sin observación' }}</div>
+          <div class="timeline-meta">
+            <span>{{ m.fecha_movimiento.strftime('%d %b %Y') if m.fecha_movimiento else '—' }}</span>
+            {% if m.motivo %}<span> · {{ m.motivo }}</span>{% endif %}
+          </div>
         </div>
       </div>
     {% else %}
-      <p class="text-muted text-sm">Sin movimientos registrados.</p>
+      <div style="text-align:center;padding:24px;color:var(--text3);">
+        <div style="font-size:28px;margin-bottom:8px;">📭</div>
+        <div class="text-sm">Sin movimientos registrados</div>
+      </div>
     {% endfor %}
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title">Evaluaciones de desempeño</div>
+    <div class="card-title">📊 Evaluaciones de desempeño</div>
     <div class="timeline">
       {% for ev in empleado.evaluaciones_desempeno|sort(attribute='fecha_registro', reverse=true) %}
       <div class="timeline-item">
         <div class="timeline-dot"></div>
         <div class="timeline-content">
-          <div class="timeline-title">{{ ev.periodo }} · {{ ev.puntaje_total or '0' }}%</div>
-          <div class="timeline-meta">{{ ev.plantilla.nombre if ev.plantilla else 'Plantilla' }} · estado {{ ev.estado_aceptacion }}</div>
+          <div class="timeline-title" style="display:flex;align-items:center;gap:8px;">
+            {{ ev.periodo }}
+            <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;
+              {% if (ev.puntaje_total or 0)|float >= 80 %}background:var(--green-bg);color:var(--green);
+              {% elif (ev.puntaje_total or 0)|float >= 50 %}background:var(--amber-bg);color:var(--amber);
+              {% else %}background:var(--red-bg);color:var(--red);{% endif %}">
+              {{ ev.puntaje_total or '0' }}%
+            </span>
+          </div>
+          <div class="timeline-meta">
+            {{ ev.plantilla.nombre if ev.plantilla else 'Sin plantilla' }} ·
+            <span class="badge {% if ev.estado_aceptacion == 'aceptada' %}badge-green{% elif ev.estado_aceptacion == 'rechazada' %}badge-red{% else %}badge-amber{% endif %}" style="font-size:10px;">{{ ev.estado_aceptacion }}</span>
+          </div>
           {% if ev.estado_aceptacion == 'pendiente_empleado' and (current_user.es_rrhh or (empleado.id_usuario and empleado.id_usuario == current_user.id)) %}
-          <form method="post" action="{{ url_for('empleados.aceptar_evaluacion', ev_id=ev.id) }}" class="flex gap-8 mt-12">
+          <form method="post" action="{{ url_for('empleados.aceptar_evaluacion', ev_id=ev.id) }}" class="flex gap-8 mt-12" style="flex-wrap:wrap;">
             <input type="hidden" name="accion" value="aceptar">
-            <input type="text" name="comentario_empleado" class="form-input" placeholder="Comentario del empleado">
-            <button class="btn btn-success btn-sm">Aceptar</button>
+            <input type="text" name="comentario_empleado" class="form-input" placeholder="Comentario del empleado (opcional)" style="flex:1;min-width:160px;height:32px;font-size:12px;">
+            <button class="btn btn-success btn-sm">✓ Aceptar</button>
           </form>
           {% endif %}
         </div>
       </div>
       {% else %}
-      <p class="text-muted text-sm">Sin evaluaciones registradas.</p>
+      <div style="text-align:center;padding:24px;color:var(--text3);">
+        <div style="font-size:28px;margin-bottom:8px;">📭</div>
+        <div class="text-sm">Sin evaluaciones registradas</div>
+      </div>
       {% endfor %}
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -176,21 +314,27 @@
   const sel = document.getElementById('selPlantilla');
   const box = document.getElementById('criteriosBox');
   if (!sel || !box) return;
+
   function render() {
     const criterios = data[sel.value] || [];
-    let html = '<div class="card-title" style="margin-bottom:8px;font-size:13px">Criterios</div>';
     if (!criterios.length) {
-      box.innerHTML = '<p class="text-muted text-sm">Sin criterios en plantilla.</p>';
+      box.innerHTML = '<p class="text-muted text-sm" style="padding:8px 0;">Sin criterios en la plantilla seleccionada.</p>';
       return;
     }
+    let html = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:4px;">'
+             + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:12px;">Criterios de evaluación</div>'
+             + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
     criterios.forEach(c => {
-      const id = String(c.id || '').trim();
+      const id   = String(c.id || '').trim();
       if (!id) return;
       const maxv = Number(c.max || 5);
-      html += '<div class="form-group mb-16"><label class="form-label">'+(c.texto||id)+' (max '+maxv+')</label><input class="form-input" type="number" min="0" max="'+maxv+'" step="0.1" name="criterio_'+id+'" required></div>';
+      html += '<div class="form-group"><label class="form-label">' + (c.texto || id) + ' <span style="color:var(--text3);font-weight:400;">(max ' + maxv + ')</span></label>'
+            + '<input class="form-input" type="number" min="0" max="' + maxv + '" step="0.1" name="criterio_' + id + '" required placeholder="0"></div>';
     });
+    html += '</div></div>';
     box.innerHTML = html;
   }
+
   sel.addEventListener('change', render);
   render();
 })();

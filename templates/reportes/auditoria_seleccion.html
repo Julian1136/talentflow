@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Auditoría selección{% endblock %}
+{% block page_title %}Auditoría de selección{% endblock %}
+{% block page_sub %}Historial de acciones registradas en procesos{% endblock %}
+
+{% block content %}
+<div class="card mb-24 flex justify-between items-center" style="flex-wrap:wrap;gap:12px;">
+  <p class="text-sm text-muted" style="margin:0;">Mostrando hasta {{ lim }} eventos recientes.</p>
+  <a class="btn btn-primary" href="{{ url_for('reportes.exportar_auditoria_seleccion', lim=lim) }}">Descargar CSV</a>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Fecha</th><th>Aplicación</th><th>Acción</th><th>Estados</th><th>Obs.</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="font-mono text-sm">{{ r.fecha_accion.strftime('%Y-%m-%d %H:%M') if r.fecha_accion else '—' }}</td>
+          <td>{% if r.id_aplicacion %}#{{ r.id_aplicacion }}{% else %}—{% endif %}</td>
+          <td class="text-sm">{{ r.accion }}</td>
+          <td class="text-sm text-muted">{{ r.estado_anterior or '—' }} → {{ r.estado_nuevo or '—' }}</td>
+          <td class="text-sm">{{ (r.observaciones or '')[:120] }}{% if r.observaciones and r.observaciones|length > 120 %}…{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-muted">Sin registros.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

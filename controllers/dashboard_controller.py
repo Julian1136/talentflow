@@ -5,8 +5,9 @@ TalentFlow — Dashboard y Reportes
 import csv
 import io
 from collections import defaultdict
+from datetime import datetime, timedelta
 
-from flask import Blueprint, Response, jsonify, redirect, render_template, url_for
+from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import case, func
 
@@ -71,6 +72,98 @@ def index():
     )
 
 
+@dashboard_bp.route("/buscar")
+@login_required
+def busqueda_global():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return redirect(url_for("dashboard.index"))
+    like = f"%{q}%"
+
+    candidatos = []
+    vacantes = []
+    if current_user.puede_ver_seleccion:
+        candidatos = (
+            Candidato.query.filter(
+                db.or_(
+                    Candidato.cedula.ilike(like),
+                    Candidato.nombres.ilike(like),
+                    Candidato.apellidos.ilike(like),
+                    Candidato.correo.ilike(like),
+                )
+            )
+            .order_by(Candidato.fecha_registro.desc())
+            .limit(8)
+            .all()
+        )
+        vacantes = (
+            Vacante.query.filter(
+                db.or_(
+                    Vacante.titulo.ilike(like),
+                    Vacante.area.ilike(like),
+                    Vacante.ciudad.ilike(like),
+                )
+            )
+            .order_by(Vacante.fecha_creacion.desc())
+            .limit(8)
+            .all()
+        )
+
+    empleados = []
+    if current_user.es_rrhh:
+        empleados = (
+            Empleado.query.join(Candidato, Candidato.cedula == Empleado.cedula)
+            .filter(
+                db.or_(
+                    Empleado.cedula.ilike(like),
+                    Candidato.nombres.ilike(like),
+                    Candidato.apellidos.ilike(like),
+                )
+            )
+            .order_by(Empleado.id.desc())
+            .limit(8)
+            .all()
+        )
+
+    return render_template(
+        "dashboard/busqueda.html",
+        q=q,
+        candidatos=candidatos,
+        vacantes=vacantes,
+        empleados=empleados,
+    )
+
+
+@dashboard_bp.route("/notificaciones/marcar-vista", methods=["POST"])
+@login_required
+def marcar_notificacion_vista():
+    notif_key = (request.form.get("notif_key") or "").strip()
+    if not notif_key:
+        return jsonify({"ok": False, "error": "notif_key requerido"}), 400
+    try:
+        from services.notifications_store import mark_seen
+
+        mark_seen(current_user.id, notif_key)
+        return jsonify({"ok": True})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@dashboard_bp.route("/notificaciones/marcar-todas-vistas", methods=["POST"])
+@login_required
+def marcar_todas_notificaciones_vistas():
+    notif_keys = request.form.getlist("notif_keys[]")
+    if not notif_keys:
+        return jsonify({"ok": True, "count": 0})
+    try:
+        from services.notifications_store import mark_many_seen
+
+        count = mark_many_seen(current_user.id, notif_keys)
+        return jsonify({"ok": True, "count": count})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @dashboard_bp.route("/dashboard/api/hr/resumen")
 @login_required
 def api_hr_resumen():
@@ -101,6 +194,9 @@ def api_hr_resumen():
 @login_required
 def api_embudo():
     """Conteos por estado del pipeline (orden definido en ESTADOS_APLICACION)."""
+    if not current_user.puede_ver_seleccion:
+        return jsonify({"error": "Sin permiso."}), 403
+
     data = []
     for codigo, nombre in ESTADOS_APLICACION:
         count = Aplicacion.query.filter_by(estado=codigo).count()
@@ -112,6 +208,9 @@ def api_embudo():
 @login_required
 def api_conversion_vacante():
     """Aplicaciones por vacante y tasa contratados / total."""
+    if not current_user.puede_ver_seleccion:
+        return jsonify({"error": "Sin permiso."}), 403
+
     contratado_case = case((Aplicacion.estado == "contratado", 1), else_=0)
     rows = (
         db.session.query(
@@ -152,6 +251,9 @@ def api_tiempo_etapa():
     Promedio de horas entre entradas consecutivas del historial por estado destino.
     Aproximación de tiempo en etapa cuando el historial registra cambios de estado.
     """
+    if not current_user.puede_ver_seleccion:
+        return jsonify({"error": "Sin permiso."}), 403
+
     app_ids = (
         db.session.query(HistorialProceso.id_aplicacion)
         .filter(HistorialProceso.id_aplicacion.isnot(None))
@@ -228,14 +330,99 @@ def api_sesgos():
 @reportes_bp.route("/")
 @login_required
 def index():
-    return render_template("reportes/index.html")
+    if not current_user.puede_ver_seleccion:
+        flash("Sin permisos para reportes.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    corte = datetime.utcnow() - timedelta(days=30)
+    rep_kpis = {
+        "candidatos_activos": Candidato.query.filter_by(activo=True).count(),
+        "vacantes_abiertas": Vacante.query.filter_by(estado="abierta").count(),
+        "postulaciones_30d": Aplicacion.query.filter(
+            Aplicacion.fecha_aplicacion.isnot(None), Aplicacion.fecha_aplicacion >= corte
+        ).count(),
+    }
+    return render_template("reportes/index.html", rep_kpis=rep_kpis)
+
+
+@reportes_bp.route("/auditoria-seleccion")
+@login_required
+def auditoria_seleccion():
+    if not current_user.es_rrhh:
+        flash("Solo RRHH o administración.", "danger")
+        return redirect(url_for("reportes.index"))
+    lim = min(500, request.args.get("lim", default=200, type=int))
+    rows = HistorialProceso.query.order_by(HistorialProceso.id.desc()).limit(lim).all()
+    return render_template("reportes/auditoria_seleccion.html", rows=rows, lim=lim)
+
+
+@reportes_bp.route("/auditoria-seleccion/exportar")
+@login_required
+def exportar_auditoria_seleccion():
+    if not current_user.es_rrhh:
+        return redirect(url_for("reportes.index"))
+    lim = min(10000, request.args.get("lim", default=5000, type=int))
+    rows = HistorialProceso.query.order_by(HistorialProceso.id.desc()).limit(lim).all()
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(["id", "fecha", "cedula", "id_aplicacion", "accion", "estado_ant", "estado_nuevo", "observaciones", "id_usuario"])
+    for r in rows:
+        w.writerow(
+            [
+                r.id,
+                r.fecha_accion.strftime("%Y-%m-%d %H:%M:%S") if r.fecha_accion else "",
+                r.cedula_candidato or "",
+                r.id_aplicacion or "",
+                r.accion or "",
+                r.estado_anterior or "",
+                r.estado_nuevo or "",
+                (r.observaciones or "")[:800],
+                r.id_usuario or "",
+            ]
+        )
+    output.seek(0)
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=auditoria_seleccion.csv"},
+    )
 
 
 @reportes_bp.route("/exportar-candidatos")
 @login_required
 def exportar_candidatos():
-    """Exporta todos los candidatos activos a CSV."""
-    candidatos = Candidato.query.filter_by(activo=True).all()
+    """Exporta candidatos activos a CSV (respeta filtros opcionales q, estado, ciudad)."""
+    if not current_user.puede_ver_seleccion:
+        return redirect(url_for("reportes.index"))
+
+    from sqlalchemy import exists as sa_exists
+
+    qf = (request.args.get("q") or "").strip()
+    estado = (request.args.get("estado") or "").strip()
+    ciudad = (request.args.get("ciudad") or "").strip()
+
+    query = Candidato.query.filter_by(activo=True)
+    if qf:
+        like = f"%{qf}%"
+        query = query.filter(
+            db.or_(
+                Candidato.cedula.ilike(like),
+                Candidato.nombres.ilike(like),
+                Candidato.apellidos.ilike(like),
+                Candidato.correo.ilike(like),
+            )
+        )
+    if ciudad:
+        query = query.filter(Candidato.ciudad.ilike(f"%{ciudad}%"))
+    if estado:
+        query = query.filter(
+            sa_exists().where(
+                Aplicacion.cedula_candidato == Candidato.cedula,
+                Aplicacion.estado == estado,
+            )
+        )
+
+    candidatos = query.order_by(Candidato.fecha_registro.desc()).all()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -359,4 +546,64 @@ def exportar_evaluaciones_desempeno():
         output,
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=evaluaciones_desempeno.csv"},
+    )
+
+
+@reportes_bp.route("/exportar-integracion-ats")
+@login_required
+def exportar_integracion_ats():
+    """CSV plano para integraciones externas (ATS / nómina): una fila por postulación."""
+    if not (current_user.es_rrhh or current_user.es_reclutador):
+        flash("Sin permisos.", "danger")
+        return redirect(url_for("reportes.index"))
+
+    lim = min(10000, request.args.get("lim", default=5000, type=int))
+    rows = (
+        db.session.query(Aplicacion, Candidato, Vacante)
+        .join(Candidato, Candidato.cedula == Aplicacion.cedula_candidato)
+        .join(Vacante, Vacante.id == Aplicacion.id_vacante)
+        .order_by(Aplicacion.fecha_aplicacion.desc())
+        .limit(lim)
+        .all()
+    )
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(
+        [
+            "id_aplicacion",
+            "cedula_candidato",
+            "nombres",
+            "apellidos",
+            "email_candidato",
+            "telefono",
+            "ciudad_candidato",
+            "id_vacante",
+            "titulo_vacante",
+            "estado_postulacion",
+            "fecha_aplicacion",
+            "score",
+        ]
+    )
+    for ap, cand, vac in rows:
+        w.writerow(
+            [
+                ap.id,
+                cand.cedula,
+                cand.nombres,
+                cand.apellidos,
+                cand.correo,
+                cand.telefono or "",
+                cand.ciudad or "",
+                vac.id,
+                vac.titulo,
+                ap.estado or "",
+                ap.fecha_aplicacion.strftime("%Y-%m-%d %H:%M:%S") if ap.fecha_aplicacion else "",
+                ap.score if ap.score is not None else "",
+            ]
+        )
+    output.seek(0)
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=talentflow_export_ats.csv"},
     )

@@ -1,0 +1,242 @@
+{% extends "empleados/catalogos/layout.html" %}
+{% block catalog_title %}Plantillas de desempeño — Catálogos HR{% endblock %}
+{% block catalog_h1 %}Plantillas de desempeño{% endblock %}
+{% block catalog_subtitle %}Criterios ponderados por cargo para evaluaciones formales{% endblock %}
+
+{% block catalog_hero %}
+<h2>Plantillas por cargo</h2>
+<p>Vincula cada versión a un cargo activo. Los criterios en JSON alimentan el formulario de evaluación y el puntaje consolidado automáticamente.</p>
+{% endblock %}
+
+{% block catalog_body %}
+<div class="hr-cat-grid">
+
+  {# ── Create ── #}
+  <div class="hr-cat-panel">
+    <div class="hr-cat-panel__hd">
+      <h3>➕ Nueva plantilla</h3>
+      <span>Selecciona cargo, define versión y criterios</span>
+    </div>
+    <div class="hr-cat-panel__bd">
+      <form method="post" action="{{ url_for('empleados.crear_plantilla_desempeno') }}" class="form-grid" id="form-plantilla">
+        <div class="form-group form-full">
+          <label class="form-label">Cargo</label>
+          <select name="id_cargo" class="form-select" required>
+            <option value="">Seleccionar cargo…</option>
+            {% for c in cargos_select %}
+            <option value="{{ c.id }}">{{ c.nombre }} ({{ c.codigo }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre plantilla</label>
+          <input name="nombre" class="form-input" required placeholder="Evaluación Q1 2026">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Versión</label>
+          <input name="version" type="number" class="form-input" min="1" value="1">
+        </div>
+        <div class="form-full">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">
+            <input type="checkbox" name="activa" checked style="width:16px;height:16px;accent-color:var(--accent);">
+            <span style="font-weight:600;">Plantilla activa</span>
+          </label>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Importar JSON desde URL <span style="font-weight:400;color:var(--text3);">(opcional)</span></label>
+          <input name="criterios_url" class="form-input" placeholder="https://…/criterios.json">
+          <div class="form-hint">Si dejas el JSON vacío, se descargará desde la URL.</div>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Criterios JSON</label>
+          <textarea id="criterios-json" name="criterios_json" class="form-textarea" rows="6" required
+            placeholder='[{"id":"cumplimiento","texto":"Cumplimiento de metas","peso":4,"max":10}]'></textarea>
+          <div class="form-hint">Lista de objetos: <code>id</code>, <code>texto</code>, <code>peso</code>, <code>max</code>.</div>
+        </div>
+        <div class="form-full" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addCriterioRow()">+ Criterio visual</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="buildJsonFromRows()">⚙️ Generar JSON</button>
+        </div>
+        <div id="criterios-builder" class="form-full"></div>
+        <div class="form-full">
+          <button type="submit" class="btn btn-primary" style="width:100%;">Crear plantilla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Directory ── #}
+  <div class="hr-cat-panel">
+    <div class="hr-cat-panel__hd">
+      <h3>📐 Plantillas publicadas</h3>
+      <span>Versionado por cargo — use búsqueda para localizar</span>
+    </div>
+    <div class="hr-cat-panel__bd">
+      <form method="get" action="{{ url_for('empleados.catalogos_plantillas') }}" class="hr-cat-toolbar">
+        <input type="search" name="q" class="form-input" placeholder="Buscar por nombre…" value="{{ q }}">
+        <button type="submit" class="btn btn-secondary btn-sm">Buscar</button>
+        {% if q %}
+        <a href="{{ url_for('empleados.catalogos_plantillas') }}" class="btn btn-secondary btn-sm">✕ Limpiar</a>
+        {% endif %}
+      </form>
+
+      {% if plantillas.items %}
+      <div class="hr-cat-table-wrap">
+        <table class="hr-cat-table">
+          <thead>
+            <tr>
+              <th>Cargo</th><th>Plantilla</th><th>Ver.</th><th>Estado</th>
+              <th style="min-width:180px;text-align:right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for p in plantillas.items %}
+            <tr>
+              <td>
+                <div style="font-weight:600;color:var(--text);font-size:13px;">{{ p.cargo.nombre if p.cargo else '—' }}</div>
+                <div class="font-mono text-muted" style="font-size:11px;">{{ p.cargo.codigo if p.cargo else '' }}</div>
+              </td>
+              <td><strong style="color:var(--text);">{{ p.nombre }}</strong></td>
+              <td><span class="font-mono" style="font-size:12px;">v{{ p.version }}</span></td>
+              <td>
+                <span class="badge {{ 'badge-green' if p.activa else 'badge-gray' }}">
+                  {{ '✓ Activa' if p.activa else 'Inactiva' }}
+                </span>
+              </td>
+              <td style="text-align:right;white-space:nowrap;">
+                <form method="post" action="{{ url_for('empleados.toggle_plantilla_desempeno', pid=p.id) }}" style="display:inline;">
+                  <button class="btn btn-secondary btn-xs" type="submit">
+                    {{ 'Desactivar' if p.activa else 'Activar' }}
+                  </button>
+                </form>
+                <button class="btn btn-secondary btn-xs" type="button"
+                  onclick='openEditPlantilla({{ p.id }}, {{ {"id_cargo": p.id_cargo, "nombre": p.nombre, "version": p.version, "criterios_json": p.criterios_json, "activa": p.activa}|tojson }})'>
+                  Editar
+                </button>
+                <form method="post" action="{{ url_for('empleados.eliminar_plantilla_desempeno', pid=p.id) }}" style="display:inline;"
+                      onsubmit="return confirm('¿Eliminar la plantilla {{ p.nombre }}?');">
+                  <button class="btn btn-danger btn-xs" type="submit">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if plantillas.pages > 1 %}
+      <div class="hr-cat-pagination">
+        {% if plantillas.has_prev %}
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('empleados.catalogos_plantillas', page=plantillas.prev_num, q=q) }}">← Anterior</a>
+        {% endif %}
+        <span class="text-sm text-muted">Página {{ plantillas.page }} de {{ plantillas.pages }}</span>
+        {% if plantillas.has_next %}
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('empleados.catalogos_plantillas', page=plantillas.next_num, q=q) }}">Siguiente →</a>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="hr-cat-empty">
+        <div style="font-size:36px;margin-bottom:10px;">📐</div>
+        {% if q %}Sin plantillas con ese criterio.{% else %}Crea la primera plantilla desde el panel izquierdo.{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Edit Modal ── #}
+<div class="modal-overlay hr-cat-modal" id="modal-edit-plantilla">
+  <div class="modal-box" style="width:min(600px,100%);">
+    <button type="button" class="modal-close" onclick="closeModal('modal-edit-plantilla')" aria-label="Cerrar">×</button>
+    <div class="modal-title">✏️ Editar plantilla</div>
+    <form id="form-edit-plantilla" method="post" class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">Cargo</label>
+        <select id="ep-cargo" name="id_cargo" class="form-select" required>
+          <option value="">Seleccionar…</option>
+          {% for c in cargos_select %}
+          <option value="{{ c.id }}">{{ c.nombre }} ({{ c.codigo }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Nombre</label><input id="ep-nombre" name="nombre" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Versión</label><input id="ep-version" name="version" type="number" class="form-input" min="1" required></div>
+      <div class="form-full">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">
+          <input type="checkbox" id="ep-activa" name="activa" style="width:16px;height:16px;accent-color:var(--accent);">
+          <span style="font-weight:600;">Activa</span>
+        </label>
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">URL JSON <span style="font-weight:400;color:var(--text3);">(opcional)</span></label>
+        <input name="criterios_url" class="form-input" placeholder="https://…">
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">Criterios JSON</label>
+        <textarea id="ep-json" name="criterios_json" class="form-textarea" rows="7" required></textarea>
+      </div>
+      <div class="form-full"><button type="submit" class="btn btn-primary" style="width:100%;">💾 Guardar cambios</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block catalog_scripts %}
+<script>
+function openModal(id){ document.getElementById(id)?.classList.add('open'); }
+function closeModal(id){ document.getElementById(id)?.classList.remove('open'); }
+
+document.querySelectorAll('.hr-cat-modal').forEach(m => {
+  m.addEventListener('click', ev => { if (ev.target === m) m.classList.remove('open'); });
+});
+
+let criterioIdx = 0;
+function addCriterioRow() {
+  criterioIdx += 1;
+  const wrap = document.getElementById('criterios-builder');
+  if (!wrap.querySelector('.criterios-title')) {
+    const t = document.createElement('div');
+    t.className = 'criterios-title';
+    t.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:10px;margin-top:4px;';
+    t.textContent = 'Constructor visual';
+    wrap.insertBefore(t, wrap.firstChild);
+  }
+  const row = document.createElement('div');
+  row.className = 'criterio-row mb-8';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;';
+  row.innerHTML = `
+    <input class="form-input c-id" placeholder="id_criterio_${criterioIdx}" style="font-size:12px;">
+    <input class="form-input c-texto" placeholder="Descripción del criterio" style="font-size:12px;">
+    <div style="display:flex;gap:8px;grid-column:1/-1;">
+      <input class="form-input c-peso" type="number" step="0.1" min="0" value="1" placeholder="Peso" style="flex:1;font-size:12px;">
+      <input class="form-input c-max"  type="number" step="0.1" min="1" value="10" placeholder="Máx." style="flex:1;font-size:12px;">
+      <button type="button" onclick="this.closest('.criterio-row').remove()" class="btn btn-danger btn-xs" style="flex-shrink:0;" title="Eliminar fila">✕</button>
+    </div>
+  `;
+  wrap.appendChild(row);
+}
+
+function buildJsonFromRows() {
+  const rows = [...document.querySelectorAll('.criterio-row')];
+  const out = rows.map(r => ({
+    id:    (r.querySelector('.c-id')?.value    || '').trim(),
+    texto: (r.querySelector('.c-texto')?.value || '').trim(),
+    peso:  Number(r.querySelector('.c-peso')?.value  || 1),
+    max:   Number(r.querySelector('.c-max')?.value   || 10),
+  })).filter(x => x.id && x.texto);
+  if (!out.length) { alert('Agrega al menos un criterio con id y texto.'); return; }
+  document.getElementById('criterios-json').value = JSON.stringify(out, null, 2);
+}
+
+function openEditPlantilla(id, data) {
+  const f = document.getElementById('form-edit-plantilla');
+  f.action = "{{ url_for('empleados.editar_plantilla_desempeno', pid=0) }}".replace('/0/', '/' + id + '/');
+  document.getElementById('ep-cargo').value   = String(data.id_cargo || '');
+  document.getElementById('ep-nombre').value  = data.nombre  || '';
+  document.getElementById('ep-version').value = data.version || 1;
+  document.getElementById('ep-json').value    = data.criterios_json || '[]';
+  document.getElementById('ep-activa').checked = !!data.activa;
+  openModal('modal-edit-plantilla');
+}
+</script>
+{% endblock %}

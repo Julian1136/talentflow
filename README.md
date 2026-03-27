@@ -38,7 +38,7 @@ Variables importantes:
 - `FLASK_RUN_HOST`: por defecto `127.0.0.1` (solo tu PC). Pon `0.0.0.0` en `.env` para acceder desde la LAN (`http://<IP-del-servidor>:5000`). **Importante:** esa variable solo la usa `python app.py`. Si arrancas con `flask run`, el CLI ignora `FLASK_RUN_HOST` y queda en `127.0.0.1`; en ese caso usa `flask run --host=0.0.0.0` o el perfil *TalentFlow: flask run en LAN* en `.vscode/launch.json`. Comprueba con `netstat -ano | findstr :5000`: debe aparecer `0.0.0.0:5000`, no solo `127.0.0.1:5000`. Abre el puerto en el firewall de Windows si hace falta. El servidor de desarrollo no es adecuado para producción pública.
 - `UPLOAD_FOLDER`, `MAX_CONTENT_LENGTH_MB`: adjuntos.
 - `MAIL_*`: correo saliente (opcional; sin `MAIL_USERNAME` no se envían notificaciones).
-- `ENABLE_SCHEDULER`: `True` para activar APScheduler (tareas en segundo plano; requiere dependencia instalada).
+- `ENABLE_SCHEDULER`: `True` para activar APScheduler (recordatorios de entrevista ~24h, reintentos de correo fallidos; requiere dependencia instalada y correo configurado).
 - `ANTHROPIC_API_KEY`: opcional, para análisis de compatibilidad con IA (fase 3).
 
 Tras cambios de esquema SQL nuevos (p. ej. plantillas de evaluación), ejecuta manualmente los scripts añadidos en `database/` o aplícalos en pgAdmin.
@@ -95,11 +95,23 @@ La app quedará disponible en:
 - `database/03_plantillas_evaluacion.sql`: plantillas de evaluación dinámica y tabla de respuestas.
 - `database/04_aplicacion_score.sql`: columna `score` en aplicaciones.
 - `database/05_firma_aceptaciones.sql`: registro de aceptaciones simuladas.
+- `database/07_plan_extensiones.sql`: notas internas, IA en aplicación, onboarding, recordatorios de entrevista y cola de reintentos de correo.
 - `database/CALENDARIO_DECISION.md`: decisión de diseño del calendario (sin slots).
 
-Ejecuta los scripts 03–05 en PostgreSQL (pgAdmin o `psql`) cuando actualices un entorno existente.
+Ejecuta los scripts 03–05 y **07** en PostgreSQL (pgAdmin o `psql`) cuando actualices un entorno existente.
+
+## Migraciones Alembic (opcional)
+
+Si prefieres versionar el esquema con Alembic en lugar de aplicar solo el SQL manual:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+alembic upgrade head
+```
+
+`alembic/env.py` reutiliza la misma `SQLALCHEMY_DATABASE_URI` que la aplicación (variables `DB_*` del `.env`).
 
 ## Notas operativas
 
-- El proyecto no usa migraciones automáticas; el esquema oficial está en scripts SQL.
+- El esquema base sigue documentado en scripts SQL; Alembic complementa con revisiones (p. ej. `20250327_001`).
 - `setup_db.py` es idempotente: se puede re-ejecutar sin duplicar datos semilla.

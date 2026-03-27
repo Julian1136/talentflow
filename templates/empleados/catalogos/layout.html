@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{% block catalog_title %}Catálogos HR{% endblock %} — TalentFlow{% endblock %}
+{% block page_title %}{% block catalog_h1 %}Catálogos HR{% endblock %}{% endblock %}
+{% block page_sub %}{% block catalog_subtitle %}Configuración maestra del ciclo laboral{% endblock %}{% endblock %}
+
+{% block content %}
+<div class="hr-cat-wrap">
+
+  {# ── Subnav ── #}
+  <nav class="hr-cat-subnav" aria-label="Secciones catálogos HR">
+    <a href="{{ url_for('empleados.catalogos_sedes') }}" class="{{ 'is-active' if catalog_section == 'sedes' else '' }}">
+      <span class="hr-cat-subnav__icon">🏢</span>
+      <span>
+        <span class="hr-cat-subnav__t">Sedes</span>
+        <span class="hr-cat-subnav__d">Ubicaciones y centros de costo</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.catalogos_cargos') }}" class="{{ 'is-active' if catalog_section == 'cargos' else '' }}">
+      <span class="hr-cat-subnav__icon">📋</span>
+      <span>
+        <span class="hr-cat-subnav__t">Cargos</span>
+        <span class="hr-cat-subnav__d">Roles, niveles y competencias</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.catalogos_plantillas') }}" class="{{ 'is-active' if catalog_section == 'plantillas' else '' }}">
+      <span class="hr-cat-subnav__icon">📐</span>
+      <span>
+        <span class="hr-cat-subnav__t">Plantillas</span>
+        <span class="hr-cat-subnav__d">Criterios de evaluación por cargo</span>
+      </span>
+    </a>
+    <a href="{{ url_for('empleados.catalogos_auditoria') }}" class="{{ 'is-active' if catalog_section == 'auditoria' else '' }}">
+      <span class="hr-cat-subnav__icon">🔍</span>
+      <span>
+        <span class="hr-cat-subnav__t">Auditoría</span>
+        <span class="hr-cat-subnav__d">Historial y exportación de cambios</span>
+      </span>
+    </a>
+  </nav>
+
+  {# ── Hero ── #}
+  <section class="hr-cat-hero">
+    <div class="hr-cat-hero__inner">
+      <div class="hr-cat-hero__text">
+        {% block catalog_hero %}{% endblock %}
+      </div>
+      <div class="hr-cat-kpis">
+        <div class="hr-cat-kpi">
+          <div class="hr-cat-kpi__v">{{ kpis_sedes_total }}</div>
+          <div class="hr-cat-kpi__l">Sedes</div>
+        </div>
+        <div class="hr-cat-kpi">
+          <div class="hr-cat-kpi__v">{{ kpis_cargos_total }}</div>
+          <div class="hr-cat-kpi__l">Cargos</div>
+        </div>
+        <div class="hr-cat-kpi">
+          <div class="hr-cat-kpi__v">{{ kpis_plantillas_total }}</div>
+          <div class="hr-cat-kpi__l">Plantillas</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% block catalog_body %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% block catalog_scripts %}{% endblock %}
+{% endblock %}

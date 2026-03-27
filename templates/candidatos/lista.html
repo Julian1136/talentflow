@@ -6,11 +6,12 @@
 
 {% block topbar_actions %}
 <a href="{{ url_for('candidatos.nuevo') }}" class="btn btn-primary">+ Nuevo candidato</a>
+<a href="{{ url_for('reportes.exportar_candidatos', q=filtro_q, estado=filtro_estado, ciudad=filtro_ciudad) }}" class="btn btn-secondary">Exportar CSV (filtro actual)</a>
 {% endblock %}
 
 {% block content %}
-<div class="card mb-24">
-  <form method="GET" class="flex gap-8 items-center" style="flex-wrap: wrap;">
+<div class="card mb-24" data-loading-on-submit="1">
+  <form method="GET" class="flex gap-8 items-center" style="flex-wrap: wrap;" id="form-filtros-cand">
     <div style="flex: 2; min-width: 200px;">
       <input type="text" name="q" placeholder="Buscar por cédula, nombre, correo..." value="{{ filtro_q }}" class="form-input w-full">
     </div>
@@ -30,29 +31,74 @@
   </form>
 </div>
 
+{% if current_user.es_reclutador %}
+<div class="card mb-24">
+  <div class="card-title">Cambio de estado masivo</div>
+  <p class="text-sm text-muted mb-16">Marca candidatos con postulación activa y aplica el mismo estado a la <strong>última</strong> aplicación mostrada.</p>
+  <form id="bulk-masivo-cand" method="POST" action="{{ url_for('candidatos.bulk_estado_aplicaciones') }}" class="flex gap-8 items-end" style="flex-wrap:wrap;">
+    <div class="form-group" style="min-width:220px;flex:1;">
+      <label class="form-label">Nuevo estado</label>
+      <select name="nuevo_estado" class="form-select" required>
+        <option value="">— Elegir —</option>
+        {% for codigo, nombre in estados %}
+        <option value="{{ codigo }}">{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="flex:2;min-width:200px;">
+      <label class="form-label">Observaciones (opcional)</label>
+      <input type="text" name="observaciones" class="form-input" maxlength="500" placeholder="Nota en historial">
+    </div>
+    <button type="submit" class="btn btn-primary" onclick="return document.querySelectorAll('input[name=app_ids]:checked').length > 0 || (alert('Selecciona al menos un candidato.'), false);">Aplicar a seleccionados</button>
+  </form>
+</div>
+{% endif %}
+
+
 <div class="card">
   <div class="table-wrap">
-    <table>
+    <table class="data-table-mobile cards">
       <thead>
-        <tr><th>Cédula</th><th>Nombre completo</th><th>Teléfono</th><th>Ciudad</th><th>Estado actual</th><th>Acciones</th></tr>
+        <tr>
+          {% if current_user.es_reclutador %}<th style="width:36px;"></th>{% endif %}
+          <th>Cédula</th><th>Nombre completo</th><th>Teléfono</th><th>Ciudad</th><th>Estado actual</th><th>Acciones</th>
+        </tr>
       </thead>
       <tbody>
         {% for c in candidatos %}
         <tr>
-          <td class="font-mono text-sm">{{ c.cedula }}</td>
-          <td><strong>{{ c.nombre_completo }}</strong><br><span class="text-xs text-muted">{{ c.correo }}</span></td>
-          <td>{{ c.telefono or '-' }}</td>
-          <td>{{ c.ciudad or '-' }}</td>
-          <td>{% if c.ultimo_estado != 'Sin aplicaciones' %}<span class="badge badge-blue">{{ c.ultimo_estado }}</span>{% else %}<span class="badge badge-gray">{{ c.ultimo_estado }}</span>{% endif %}</td>
-          <td>
+          {% if current_user.es_reclutador %}
+          <td data-label="">
+            {% if c._ultima_aplicacion %}
+            <input type="checkbox" name="app_ids" value="{{ c._ultima_aplicacion.id }}" form="bulk-masivo-cand" class="app-pick">
+            {% endif %}
+          </td>
+          {% endif %}
+          <td class="font-mono text-sm" data-label="Cédula">{{ c.cedula }}</td>
+          <td data-label="Nombre"><strong>{{ c.nombre_completo }}</strong><br><span class="text-xs text-muted">{{ c.correo }}</span></td>
+          <td data-label="Tel.">{{ c.telefono or '-' }}</td>
+          <td data-label="Ciudad">{{ c.ciudad or '-' }}</td>
+          <td data-label="Estado">{% if c.ultimo_estado != 'Sin aplicaciones' %}<span class="badge badge-blue">{{ c.ultimo_estado }}</span>{% else %}<span class="badge badge-gray">{{ c.ultimo_estado }}</span>{% endif %}</td>
+          <td data-label="">
             <a href="{{ url_for('candidatos.detalle', cedula=c.cedula) }}" class="btn btn-secondary btn-sm">Ver</a>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="text-center text-muted">No se encontraron candidatos</td></tr>
+        <tr><td colspan="{{ 7 if current_user.es_reclutador else 6 }}" class="text-center text-muted">No se encontraron candidatos</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if pagination.pages > 1 %}
+  <div class="flex gap-8 mt-16 items-center" style="flex-wrap:wrap;">
+    {% if pagination.has_prev %}
+    <a class="btn btn-secondary btn-xs" href="{{ url_for('candidatos.lista', page=pagination.prev_num, q=filtro_q, estado=filtro_estado, ciudad=filtro_ciudad) }}">← Anterior</a>
+    {% endif %}
+    <span class="text-sm text-muted">Página {{ pagination.page }} de {{ pagination.pages }}</span>
+    {% if pagination.has_next %}
+    <a class="btn btn-secondary btn-xs" href="{{ url_for('candidatos.lista', page=pagination.next_num, q=filtro_q, estado=filtro_estado, ciudad=filtro_ciudad) }}">Siguiente →</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
